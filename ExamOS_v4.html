@@ -904,6 +904,9 @@ tr:hover td { background: var(--bg3); }
     <div class="nav-item" onclick="showPage('help')">
       <span class="nav-icon">?</span> Handleiding
     </div>
+    <div class="nav-item" onclick="showPage('topics')">
+      <span class="nav-icon">≡</span> Stof & Topics
+    </div>
     <div class="nav-item" onclick="showPage('settings')">
       <span class="nav-icon">⊡</span> Instellingen
     </div>
@@ -916,7 +919,10 @@ tr:hover td { background: var(--bg3); }
     </div>
     <div class="today-date" id="sidebar-date"></div>
     <div class="text-dim" id="days-to-exam"></div>
-    <div id="sync-status" style="font-size:9px;color:var(--text3);margin-top:4px;letter-spacing:.04em">◉ Local</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px">
+      <div id="sync-status" style="font-size:9px;color:var(--text3);letter-spacing:.04em">◉ Local</div>
+      <div style="font-size:9px;color:var(--text3);cursor:pointer;letter-spacing:.04em" onclick="doLogout()" title="Uitloggen">↪ Logout</div>
+    </div>
   </div>
 </nav>
 
@@ -1398,22 +1404,30 @@ tr:hover td { background: var(--bg3); }
         <label class="form-label">Eerste examen datum</label>
         <input type="date" class="form-input" id="setting-exam-date">
       </div>
-      <div class="form-group">
-        <label class="form-label">Anthropic API Key (voor AI nakijken)</label>
-        <input type="password" class="form-input" id="setting-apikey" placeholder="sk-ant-...">
-        <div style="font-size:10px;color:var(--text3);margin-top:4px">Wordt lokaal opgeslagen. Nodig voor AI-nakijkfunctie.</div>
-      </div>
     </div>
 
     <div class="card">
-      <div class="card-title">Current grades (last known)</div>
+      <div class="card-title">SE Cijfers (schoolexamen)</div>
       <div id="grades-inputs"></div>
     </div>
   </div>
 
   <div class="card mt-16">
-    <div class="card-title">Topic configuration per subject</div>
-    <div id="topic-editor"></div>
+    <div class="card-title">AI API Keys</div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:12px">Nodig voor AI Nakijken, Quiz generator en AI Studieassistent. Keys worden lokaal opgeslagen en alleen gebruikt voor directe API calls.</div>
+    <div class="grid-2">
+      <div class="form-group">
+        <label class="form-label">Anthropic API Key (Claude)</label>
+        <input type="password" class="form-input" id="setting-apikey" placeholder="sk-ant-...">
+        <div style="font-size:10px;color:var(--text3);margin-top:4px"><a href="https://console.anthropic.com/settings/keys" target="_blank" style="color:var(--accent2)">→ Key aanmaken op console.anthropic.com</a></div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">OpenAI API Key (GPT — optioneel)</label>
+        <input type="password" class="form-input" id="setting-openai-key" placeholder="sk-...">
+        <div style="font-size:10px;color:var(--text3);margin-top:4px"><a href="https://platform.openai.com/api-keys" target="_blank" style="color:var(--accent2)">→ Key aanmaken op platform.openai.com</a></div>
+      </div>
+    </div>
+    <div id="api-key-status" style="font-size:10px;margin-top:4px"></div>
   </div>
 
   <div class="card mt-16">
@@ -1645,6 +1659,54 @@ tr:hover td { background: var(--bg3); }
   <div class="card">
     <div class="card-title">Examenstrategie — tips</div>
     <div id="strategy-tips"></div>
+  </div>
+</div>
+
+<!-- ══════════ TOPICS PAGE ══════════ -->
+<div class="page" id="page-topics">
+  <div class="page-header">
+    <div>
+      <div class="page-title">Stof & Topics</div>
+      <div class="page-sub">Configureer onderwerpen per vak — klik een topic voor een samenvatting</div>
+    </div>
+    <button class="btn btn-primary btn-sm" onclick="saveTopics()">Opslaan</button>
+  </div>
+
+  <!-- Subject tabs -->
+  <div class="flex gap-8 mb-20" style="flex-wrap:wrap" id="topic-subject-tabs"></div>
+
+  <!-- Active subject topics -->
+  <div class="grid-2">
+    <!-- Left: topic editor -->
+    <div class="card">
+      <div class="card-title" id="topic-editor-title">Topics</div>
+      <textarea class="form-textarea" id="topic-editor-area" style="min-height:300px;font-size:12px;line-height:1.8" placeholder="Eén topic per regel"></textarea>
+      <div style="font-size:10px;color:var(--text3);margin-top:6px">Eén onderwerp per regel. Wordt gebruikt door de planner, AI quiz en AI studieassistent.</div>
+    </div>
+
+    <!-- Right: topic list with clickable summary links -->
+    <div>
+      <div class="card mb-12">
+        <div class="card-title">Topics — klik voor samenvatting</div>
+        <div id="topic-click-list"></div>
+      </div>
+      <div class="card" id="topic-summary-card" style="display:none">
+        <div class="flex-between mb-8">
+          <div class="card-title" style="margin-bottom:0" id="topic-summary-title">Samenvatting</div>
+          <div class="flex gap-8">
+            <select class="form-select" id="topic-summary-provider" style="width:110px;padding:4px 8px;font-size:10px">
+              <option value="anthropic">Claude</option>
+              <option value="openai">GPT</option>
+            </select>
+          </div>
+        </div>
+        <div id="topic-summary-content" style="font-size:12px;color:var(--text2);line-height:1.8;white-space:pre-wrap;max-height:400px;overflow-y:auto"></div>
+        <div id="topic-summary-loading" style="display:none;text-align:center;padding:20px">
+          <div style="font-size:20px;animation:spin 2s linear infinite">◈</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:6px">Samenvatting laden...</div>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -3189,6 +3251,8 @@ function renderSettings() {
   document.getElementById('setting-name').value = state.settings.name || '';
   const akEl = document.getElementById('setting-apikey');
   if(akEl) akEl.value = state.settings.apiKey || '';
+  const oaiEl = document.getElementById('setting-openai-key');
+  if(oaiEl) oaiEl.value = state.settings.openaiKey || '';
 
   // Grade inputs
   const gradesEl = document.getElementById('grades-inputs');
@@ -3202,18 +3266,7 @@ function renderSettings() {
       </div>`;
   });
 
-  // Topic editor
-  const topicEl = document.getElementById('topic-editor');
-  topicEl.innerHTML = '<div class="grid-2">';
-  state.subjects.forEach(s => {
-    const topics = (state.topics[s.id] || []).join('\n');
-    topicEl.innerHTML += `
-      <div class="form-group">
-        <label class="form-label">${s.name}</label>
-        <textarea class="form-textarea" id="topics-${s.id}" style="min-height:120px">${topics}</textarea>
-      </div>`;
-  });
-  topicEl.innerHTML += '</div>';
+  updateApiKeyStatus();
 }
 
 function saveSettings() {
@@ -3221,22 +3274,29 @@ function saveSettings() {
   state.settings.name = document.getElementById('setting-name').value;
   const apiKeyEl = document.getElementById('setting-apikey');
   if(apiKeyEl) state.settings.apiKey = apiKeyEl.value;
+  const openaiKeyEl = document.getElementById('setting-openai-key');
+  if(openaiKeyEl) state.settings.openaiKey = openaiKeyEl.value;
 
   state.subjects.forEach(s => {
     const v = parseFloat(document.getElementById('grade-' + s.id)?.value);
     if (!isNaN(v)) s.grade = v;
   });
 
-  state.subjects.forEach(s => {
-    const ta = document.getElementById('topics-' + s.id);
-    if (ta) {
-      state.topics[s.id] = ta.value.split('\n').map(t => t.trim()).filter(Boolean);
-    }
-  });
-
   saveData();
   updateSidebarDate();
-  showToast('Settings saved');
+  updateApiKeyStatus();
+  showToast('Instellingen opgeslagen');
+}
+
+function updateApiKeyStatus() {
+  const el = document.getElementById('api-key-status');
+  if (!el) return;
+  const hasAnthropic = !!state.settings?.apiKey;
+  const hasOpenAI = !!state.settings?.openaiKey;
+  el.innerHTML = `
+    <span style="color:${hasAnthropic ? 'var(--green)' : 'var(--text3)'}">Claude: ${hasAnthropic ? '✓ actief' : '✗ niet ingesteld'}</span>
+    &nbsp;·&nbsp;
+    <span style="color:${hasOpenAI ? 'var(--green)' : 'var(--text3)'}">GPT: ${hasOpenAI ? '✓ actief' : '✗ niet ingesteld'}</span>`;
 }
 
 function confirmReset() {
@@ -5310,7 +5370,170 @@ showPage = function(name) {
   }
   if (name === 'links') renderLinksPage();
   if (name === 'help') renderHelpPage();
+  if (name === 'topics') renderTopicsPage();
 };
+
+// ══════════════════════════════════════════
+// LOGOUT
+// ══════════════════════════════════════════
+
+function doLogout() {
+  sessionStorage.removeItem('examos_auth');
+  document.getElementById('app-main').style.display = 'none';
+  document.getElementById('login-gate').style.display = 'flex';
+  document.getElementById('login-user').value = '';
+  document.getElementById('login-pass').value = '';
+  document.getElementById('login-error').textContent = '';
+  document.title = 'ExamOS';
+}
+
+// ══════════════════════════════════════════
+// TOPICS PAGE — config + AI summary
+// ══════════════════════════════════════════
+
+let _topicActiveSubject = null;
+
+function renderTopicsPage() {
+  const tabs = document.getElementById('topic-subject-tabs');
+  if (!tabs) return;
+
+  // Subject tab buttons
+  if (!_topicActiveSubject) _topicActiveSubject = state.subjects[0]?.id;
+  tabs.innerHTML = state.subjects.map(s =>
+    `<button class="btn ${s.id === _topicActiveSubject ? 'btn-primary' : 'btn-ghost'} btn-sm" onclick="switchTopicSubject('${s.id}')">${s.name}</button>`
+  ).join('');
+
+  renderTopicEditor();
+}
+
+function switchTopicSubject(sid) {
+  _topicActiveSubject = sid;
+  renderTopicsPage();
+}
+
+function renderTopicEditor() {
+  const sid = _topicActiveSubject;
+  if (!sid) return;
+  const subj = subjectById(sid);
+  const topics = (state.topics[sid] || []).join('\n');
+
+  document.getElementById('topic-editor-title').textContent = subj?.name || sid;
+  document.getElementById('topic-editor-area').value = topics;
+
+  // Clickable topic list
+  const listEl = document.getElementById('topic-click-list');
+  const topicArr = state.topics[sid] || [];
+  if (!topicArr.length) {
+    listEl.innerHTML = '<div class="empty" style="padding:16px"><div class="empty-icon">≡</div>Geen topics geconfigureerd</div>';
+    return;
+  }
+
+  listEl.innerHTML = topicArr.map((t, i) => {
+    const lastScore = topicLastScore(sid, t);
+    const status = scoreStatus(lastScore);
+    const scoreHtml = lastScore ? `<span class="chip chip-${status}" style="font-size:9px">${lastScore.toFixed(1)}</span>` : '';
+    return `
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;border-bottom:1px solid var(--border);cursor:pointer;transition:background 0.1s"
+        onmouseover="this.style.background='var(--bg3)'" onmouseout="this.style.background='transparent'"
+        onclick="loadTopicSummary('${sid}','${t.replace(/'/g,"\\'")}')">
+        <div style="font-size:12px;color:var(--text)">${t}</div>
+        <div class="flex gap-8">${scoreHtml}<span style="font-size:10px;color:var(--accent2)">→</span></div>
+      </div>`;
+  }).join('');
+}
+
+function saveTopics() {
+  const sid = _topicActiveSubject;
+  if (!sid) return;
+  const text = document.getElementById('topic-editor-area').value;
+  state.topics[sid] = text.split('\n').map(t => t.trim()).filter(Boolean);
+  saveData();
+  renderTopicEditor();
+  showToast('Topics opgeslagen voor ' + (subjectById(sid)?.name || sid));
+}
+
+async function loadTopicSummary(sid, topic) {
+  const card = document.getElementById('topic-summary-card');
+  const contentEl = document.getElementById('topic-summary-content');
+  const loadingEl = document.getElementById('topic-summary-loading');
+  const titleEl = document.getElementById('topic-summary-title');
+  card.style.display = 'block';
+  titleEl.textContent = topic;
+
+  const provider = document.getElementById('topic-summary-provider').value;
+  const subj = subjectById(sid);
+
+  // Check for the right API key
+  const anthropicKey = state.settings?.apiKey;
+  const openaiKey = state.settings?.openaiKey;
+
+  if (provider === 'anthropic' && !anthropicKey) {
+    contentEl.textContent = 'Geen Anthropic API key ingesteld. Ga naar Instellingen.';
+    return;
+  }
+  if (provider === 'openai' && !openaiKey) {
+    contentEl.textContent = 'Geen OpenAI API key ingesteld. Ga naar Instellingen.';
+    return;
+  }
+
+  contentEl.textContent = '';
+  loadingEl.style.display = 'block';
+
+  const prompt = `Je bent een VWO eindexamen docent ${subj?.name || sid}. Geef een beknopte maar complete samenvatting van het onderwerp "${topic}" voor een VWO leerling die zich voorbereidt op het centraal examen.
+
+Structuur:
+1. Kernbegrippen (3-5 begrippen met korte definitie)
+2. Belangrijkste formules/regels (als van toepassing)
+3. Examenvalkuilen (2-3 veelgemaakte fouten)
+4. Geheugensteun (ezelsbruggetje of samenvatting in 2 zinnen)
+
+Antwoord in het Nederlands. Wees beknopt maar compleet.`;
+
+  try {
+    let text = '';
+    if (provider === 'anthropic') {
+      const resp = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': anthropicKey,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true',
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 1500,
+          messages: [{ role: 'user', content: prompt }],
+        }),
+      });
+      if (!resp.ok) throw new Error(`Claude API error ${resp.status}`);
+      const data = await resp.json();
+      text = data.content?.[0]?.text || 'Geen antwoord';
+    } else {
+      const resp = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${openaiKey}`,
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          max_tokens: 1500,
+          messages: [{ role: 'user', content: prompt }],
+        }),
+      });
+      if (!resp.ok) throw new Error(`OpenAI API error ${resp.status}`);
+      const data = await resp.json();
+      text = data.choices?.[0]?.message?.content || 'Geen antwoord';
+    }
+
+    loadingEl.style.display = 'none';
+    contentEl.textContent = text;
+  } catch (e) {
+    loadingEl.style.display = 'none';
+    contentEl.textContent = 'Fout: ' + e.message;
+  }
+}
 
 // ══════════════════════════════════════════
 // UPDATE renderToday TO SHOW FOCUS
