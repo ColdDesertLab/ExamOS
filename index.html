@@ -10,29 +10,37 @@
 <title>ExamOS</title>
 <!-- SVG favicon for browsers -->
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230a0a0f'/%3E%3Ctext x='6' y='44' font-family='system-ui' font-weight='800' font-size='28' fill='%23e8e8f0'%3EE%3C/text%3E%3Ctext x='28' y='44' font-family='system-ui' font-weight='800' font-size='28' fill='%239d97ff'%3EOS%3C/text%3E%3Crect x='6' y='50' width='52' height='3' rx='1.5' fill='%236c63ff'/%3E%3C/svg%3E">
-<!-- PNG icon generated on load for Apple dock/home screen -->
-<link rel="apple-touch-icon" id="apple-icon" href="">
+<!-- PNG icon for Apple dock/home screen - generated at load -->
+<link rel="apple-touch-icon" id="apple-icon" sizes="180x180" href="">
 <script>
-// Generate 180x180 PNG icon for Apple dock using canvas
 (function(){
-  const c=document.createElement('canvas');c.width=180;c.height=180;
-  const x=c.getContext('2d');
-  // Background
-  x.fillStyle='#0a0a0f';
-  x.beginPath();x.roundRect(0,0,180,180,38);x.fill();
-  // "Exam" text
-  x.font='800 42px system-ui,-apple-system,sans-serif';
-  x.fillStyle='#e8e8f0';x.fillText('Exam',20,105);
-  // "OS" text in accent
-  x.fillStyle='#9d97ff';
-  const w=x.measureText('Exam').width;
-  x.fillText('OS',22+w,105);
-  // Accent bar
-  x.fillStyle='#6c63ff';
-  x.beginPath();x.roundRect(20,118,140,6,3);x.fill();
-  // Set as icon
-  const el=document.getElementById('apple-icon');
+  var c=document.createElement('canvas');c.width=180;c.height=180;
+  var g=c.getContext('2d');
+  // Solid dark background (no roundRect - macOS handles corner rounding)
+  g.fillStyle='#0a0a0f';g.fillRect(0,0,180,180);
+  // Large bold "E" in white
+  g.fillStyle='#e8e8f0';g.font='900 80px -apple-system,system-ui,sans-serif';
+  g.textBaseline='middle';g.fillText('E',18,82);
+  // "OS" in purple
+  g.fillStyle='#9d97ff';g.font='900 80px -apple-system,system-ui,sans-serif';
+  g.fillText('OS',75,82);
+  // Purple accent bar at bottom
+  g.fillStyle='#6c63ff';g.fillRect(18,130,144,8);
+  // Small subtitle
+  g.fillStyle='#5a5a72';g.font='500 14px -apple-system,system-ui,sans-serif';
+  g.textBaseline='top';g.fillText('EXAM TRAINING',18,148);
+  // Apply
+  var el=document.getElementById('apple-icon');
   if(el)el.href=c.toDataURL('image/png');
+  // Also set regular favicon as PNG fallback
+  var fi=document.createElement('link');fi.rel='icon';fi.type='image/png';
+  var s=document.createElement('canvas');s.width=64;s.height=64;
+  var sg=s.getContext('2d');
+  sg.fillStyle='#0a0a0f';sg.fillRect(0,0,64,64);
+  sg.fillStyle='#e8e8f0';sg.font='900 30px -apple-system,system-ui,sans-serif';sg.textBaseline='middle';sg.fillText('E',5,28);
+  sg.fillStyle='#9d97ff';sg.fillText('OS',26,28);
+  sg.fillStyle='#6c63ff';sg.fillRect(5,46,54,4);
+  fi.href=s.toDataURL('image/png');document.head.appendChild(fi);
 })();
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -630,25 +638,23 @@ tr:hover td { background: var(--bg3); }
 
 @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
-/* ── THEME TOGGLE ── */
-.theme-toggle {
-  display: flex; align-items: center; gap: 8px;
-  padding: 8px 20px; cursor: pointer;
-  font-size: 11px; color: var(--text3);
-  transition: color 0.15s; user-select: none;
+/* ── THEME PILL TOGGLE ── */
+.theme-pill {
+  display: flex; border-radius: 20px;
+  background: var(--bg4); border: 1px solid var(--border);
+  padding: 2px; margin: 8px 20px; user-select: none;
 }
-.theme-toggle:hover { color: var(--text); }
-.theme-toggle-track {
-  width: 32px; height: 16px; border-radius: 8px;
-  background: var(--bg4); border: 1px solid var(--border2);
-  position: relative; transition: background 0.2s;
+.theme-pill-opt {
+  flex: 1; text-align: center; padding: 4px 0;
+  font-size: 10px; color: var(--text3);
+  border-radius: 18px; cursor: pointer;
+  transition: all 0.2s; letter-spacing: .02em;
 }
-.theme-toggle-thumb {
-  width: 12px; height: 12px; border-radius: 50%;
-  background: var(--accent); position: absolute;
-  top: 1px; left: 1px; transition: transform 0.2s;
+.theme-pill-opt:hover { color: var(--text2); }
+.theme-pill-opt.active {
+  background: var(--accent); color: white;
+  box-shadow: 0 1px 4px rgba(108,99,255,0.3);
 }
-[data-theme="light"] .theme-toggle-thumb { transform: translateX(16px); }
 
 /* ── FOCUS TIMER ── */
 .timer-bar {
@@ -903,9 +909,10 @@ tr:hover td { background: var(--bg3); }
     </div>
   </div>
   <div class="sidebar-footer">
-    <div class="theme-toggle" onclick="toggleTheme()">
-      <div class="theme-toggle-track"><div class="theme-toggle-thumb"></div></div>
-      <span id="theme-label">Dark</span>
+    <div class="theme-pill" id="theme-pill">
+      <div class="theme-pill-opt" data-mode="dark" onclick="setThemeMode('dark')">Dark</div>
+      <div class="theme-pill-opt" data-mode="light" onclick="setThemeMode('light')">Light</div>
+      <div class="theme-pill-opt" data-mode="system" onclick="setThemeMode('system')">Auto</div>
     </div>
     <div class="today-date" id="sidebar-date"></div>
     <div class="text-dim" id="days-to-exam"></div>
@@ -4385,17 +4392,22 @@ function applyThemeMode(mode) {
     effective = (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) ? 'light' : 'dark';
   }
   document.documentElement.setAttribute('data-theme', effective);
-  const label = document.getElementById('theme-label');
-  const labels = { dark:'Dark', light:'Light', system:'Auto' };
-  if (label) label.textContent = labels[mode] || mode;
+  // Update pill active state
+  document.querySelectorAll('.theme-pill-opt').forEach(el => {
+    el.classList.toggle('active', el.dataset.mode === mode);
+  });
 }
 
+function setThemeMode(mode) {
+  localStorage.setItem('examos_theme', mode);
+  applyThemeMode(mode);
+}
+
+// Legacy compat
 function toggleTheme() {
   const modes = ['dark','light','system'];
   const current = localStorage.getItem('examos_theme') || 'system';
-  const next = modes[(modes.indexOf(current) + 1) % modes.length];
-  localStorage.setItem('examos_theme', next);
-  applyThemeMode(next);
+  setThemeMode(modes[(modes.indexOf(current) + 1) % modes.length]);
 }
 
 // ══════════════════════════════════════════
