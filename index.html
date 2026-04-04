@@ -924,10 +924,10 @@ tr:hover td { background: var(--bg3); }
     </div>
     <div class="today-date" id="sidebar-date"></div>
     <div class="text-dim" id="days-to-exam"></div>
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px">
-      <div id="sync-status" style="font-size:9px;color:var(--text3);letter-spacing:.04em">◉ Local</div>
-      <div style="font-size:9px;color:var(--text3);cursor:pointer;letter-spacing:.04em" onclick="doLogout()" title="Uitloggen">↪ Logout</div>
-    </div>
+    <div id="sync-status" style="font-size:9px;color:var(--text3);margin-top:4px;letter-spacing:.04em">◉ Local</div>
+    <button onclick="doLogout()" style="width:100%;margin-top:8px;padding:6px 0;background:transparent;border:1px solid var(--border);border-radius:var(--r);color:var(--text3);font-family:var(--font-mono);font-size:10px;cursor:pointer;transition:all 0.15s;letter-spacing:.04em"
+      onmouseover="this.style.borderColor='var(--red)';this.style.color='var(--red)'"
+      onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text3)'">↪ Uitloggen</button>
   </div>
 </nav>
 
@@ -5140,32 +5140,52 @@ function renderOldExams() {
   const el = document.getElementById('old-exams-grid');
   if (!el) return;
 
-  const years = ['2024','2023','2022','2021','2019','2018'];
+  // Correct examenblad.nl URL structure: /{year}/vwo/vakken/{category}/{slug-vwo}
   const examSubjects = [
-    { id:'math', name:'Wiskunde B', slug:'wiskunde-B', slug2:'wiskunde%20B' },
-    { id:'phys', name:'Natuurkunde', slug:'natuurkunde', slug2:'natuurkunde' },
-    { id:'chem', name:'Scheikunde', slug:'scheikunde', slug2:'scheikunde' },
-    { id:'bio',  name:'Biologie', slug:'biologie', slug2:'biologie' },
-    { id:'hist', name:'Geschiedenis', slug:'geschiedenis', slug2:'geschiedenis' },
-    { id:'eng',  name:'Engels', slug:'Engels', slug2:'Engels' },
-    { id:'nl',   name:'Nederlands', slug:'Nederlands', slug2:'Nederlands' },
-    { id:'esp',  name:'Spaans', slug:'Spaans', slug2:'Spaans' },
+    { id:'math', name:'Wiskunde B', cat:'exacte-vakken', slug:'wiskunde-b-vwo', kompas:'wiskunde-B' },
+    { id:'phys', name:'Natuurkunde', cat:'exacte-vakken', slug:'natuurkunde-vwo', kompas:'natuurkunde' },
+    { id:'chem', name:'Scheikunde', cat:'exacte-vakken', slug:'scheikunde-vwo', kompas:'scheikunde' },
+    { id:'bio',  name:'Biologie', cat:'exacte-vakken', slug:'biologie-vwo', kompas:'biologie' },
+    { id:'hist', name:'Geschiedenis', cat:'maatschappijvakken', slug:'geschiedenis-vwo', kompas:'geschiedenis' },
+    { id:'eng',  name:'Engels', cat:'talen', slug:'engels-vwo', kompas:'Engels' },
+    { id:'nl',   name:'Nederlands', cat:'talen', slug:'nederlands-vwo', kompas:'Nederlands' },
+    { id:'esp',  name:'Spaans', cat:'talen', slug:'spaans-vwo', kompas:'Spaans' },
+  ];
+
+  // Years with known available exams on examenblad.nl (2020 was COVID — no exams)
+  const years = [
+    { y:'2024', available: true },
+    { y:'2023', available: true },
+    { y:'2022', available: true },
+    { y:'2021', available: true },
+    { y:'2019', available: true },
+    { y:'2018', available: true },
+    { y:'2020', available: false }, // COVID — geen examens
   ];
 
   el.innerHTML = examSubjects.map(s => {
     const subj = subjectById(s.id);
-    const color = subj && (subj.grade||6) < 5.5 ? 'var(--red)' : subj && (subj.grade||6) < 6 ? 'var(--amber)' : 'var(--text2)';
+    const avg = subjectAvgScore(s.id) ?? subj?.grade ?? 6;
+    const status = scoreStatus(avg);
+    const nameColor = status === 'critical' ? 'var(--red)' : status === 'risk' ? 'var(--amber)' : status === 'good' ? 'var(--blue)' : 'var(--green)';
+
     return `
       <div style="margin-bottom:16px">
-        <div style="font-size:12px;font-weight:500;color:${color};margin-bottom:6px">${s.name}</div>
+        <div style="font-size:12px;font-weight:500;color:${nameColor};margin-bottom:6px">${s.name} <span style="font-size:10px;color:var(--text3)">(SE ${avg.toFixed(1)})</span></div>
         <div style="display:flex;flex-wrap:wrap;gap:4px">
-          ${years.map(y => `
-            <a href="https://www.examenblad.nl/examen/${s.slug}/vwo/2026/tijdvak-1" target="_blank"
-              style="text-decoration:none;padding:4px 10px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);font-size:11px;color:var(--accent2);transition:border-color 0.15s"
-              onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'"
-              title="${s.name} ${y}">${y}</a>`).join('')}
-          <a href="https://examenkompas.citolab.nl/overzicht/VWO/${s.slug}" target="_blank"
-            style="text-decoration:none;padding:4px 10px;background:var(--accent-glow);border:1px solid var(--accent);border-radius:var(--r);font-size:11px;color:var(--accent2)">Kompas ↗</a>
+          ${years.filter(yr => yr.available).map(yr => `
+            <a href="https://www.examenblad.nl/${yr.y}/vwo/vakken/${s.cat}/${s.slug}" target="_blank"
+              style="text-decoration:none;padding:4px 10px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);font-size:11px;color:var(--accent2);transition:all 0.15s"
+              onmouseover="this.style.borderColor='var(--accent)';this.style.background='var(--accent-glow)'"
+              onmouseout="this.style.borderColor='var(--border)';this.style.background='var(--bg3)'"
+              title="${s.name} ${yr.y} — examenvragen + antwoordmodel">${yr.y}</a>`).join('')}
+          ${years.filter(yr => !yr.available).map(yr => `
+            <span style="padding:4px 10px;background:var(--bg4);border:1px solid var(--border);border-radius:var(--r);font-size:11px;color:var(--text3);cursor:not-allowed;opacity:0.5"
+              title="${yr.y} — geen CE (COVID)">${yr.y}</span>`).join('')}
+          <a href="https://examenkompas.citolab.nl/overzicht/VWO/${s.kompas}" target="_blank"
+            style="text-decoration:none;padding:4px 10px;background:var(--accent-glow);border:1px solid var(--accent);border-radius:var(--r);font-size:11px;color:var(--accent2);transition:all 0.15s"
+            onmouseover="this.style.background='var(--accent)';this.style.color='white'"
+            onmouseout="this.style.background='var(--accent-glow)';this.style.color='var(--accent2)'">Kompas ↗</a>
         </div>
       </div>`;
   }).join('');
