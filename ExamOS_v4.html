@@ -615,6 +615,11 @@ tr:hover td { background: var(--bg3); }
 .priority-dot.high { background: var(--red); }
 .priority-dot.med { background: var(--amber); }
 .priority-dot.low { background: var(--green); }
+.priority-dot.critical { background: var(--red); }
+.priority-dot.risk { background: var(--amber); }
+.priority-dot.good { background: var(--blue); }
+.priority-dot.strong { background: var(--green); }
+.priority-dot.unknown { background: var(--text3); }
 
 /* Editable score cell */
 .editable-score {
@@ -2383,55 +2388,79 @@ function generateInitialPlan() {
   const today = todayStr();
   let cursor = today;
   const schedCount = {};
-  DEFAULT_SUBJECTS.forEach(s => schedCount[s.id] = 0);
+  const lastScheduled = {};
+  DEFAULT_SUBJECTS.forEach(s => { schedCount[s.id] = 0; lastScheduled[s.id] = ''; });
 
-  for (let day = 0; day < 58; day++) {
+  // Plan until last exam
+  const lastExamDate = DEFAULT_SUBJECTS.reduce((l, s) => s.examDate > l ? s.examDate : l, '2026-05-11');
+  const lastExamMs = new Date(lastExamDate + 'T12:00:00').getTime();
+
+  for (let day = 0; day < 90; day++) {
     const d = new Date(cursor + 'T12:00:00');
+    if (d.getTime() > lastExamMs) break;
     const dow = d.getDay();
     const isSaturday = dow === 6;
     const isSunday   = dow === 0;
 
-    // Saturday: 2 sessions. Sunday: review/rest, skip auto-plan.
     if (isSunday) { cursor = addDays(cursor, 1); continue; }
-    const maxSlots = isSaturday ? 2 : 1;
 
-    // Only schedule subjects whose exam is still upcoming
+    // Exam week: 2 slots per day
+    const closestExamDays = Math.min(...DEFAULT_SUBJECTS.map(s => {
+      const ed = new Date((s.examDate||'2026-05-31')+'T12:00:00');
+      return Math.max(0, (ed - d) / 86400000);
+    }).filter(x => x > 0));
+    const maxSlots = isSaturday ? 2 : (closestExamDays <= 7 ? 2 : 1);
+
     const available = DEFAULT_SUBJECTS.filter(s => {
       const ed = new Date((s.examDate || '2026-05-31') + 'T12:00:00');
       return ed > d;
     });
     if (!available.length) { cursor = addDays(cursor, 1); continue; }
 
-    // Sort by urgency (most urgent first)
-    const sorted = [...available].sort((a, b) => calcUrgency(a, cursor) - calcUrgency(b, cursor));
+    // Check for starved subjects (not scheduled in last 6 days)
+    const starved = available.filter(s => {
+      if (!lastScheduled[s.id]) return true;
+      const gap = (d - new Date(lastScheduled[s.id] + 'T12:00:00')) / 86400000;
+      return gap >= 6;
+    });
 
-    for (let slot = 0; slot < maxSlots && slot < sorted.length; slot++) {
-      const subj = sorted[slot];
+    // Sort by urgency, but starved subjects jump the queue
+    const sorted = [...available].sort((a, b) => calcUrgency(a, cursor) - calcUrgency(b, cursor));
+    const queue = [];
+
+    // Starved first (sorted by urgency among themselves)
+    if (starved.length) {
+      starved.sort((a, b) => calcUrgency(a, cursor) - calcUrgency(b, cursor));
+      queue.push(starved[0]);
+    }
+
+    // Then urgency-sorted rest
+    sorted.forEach(s => { if (!queue.find(q => q.id === s.id)) queue.push(s); });
+
+    for (let slot = 0; slot < maxSlots && slot < queue.length; slot++) {
+      const subj = queue[slot];
       const topics = DEFAULT_TOPICS[subj.id] || ['Algemeen'];
       const topic  = topics[schedCount[subj.id] % topics.length];
 
       const sessCount = plan.filter(p => p.subjectId === subj.id).length;
-      // Critical subjects get exam practice every 3rd session; others every 4th; Saturdays always exam
       const examFreq = subj.grade < 5.5 ? 3 : 4;
-      const sessType = isSaturday ? 'exam' : (sessCount % examFreq === examFreq - 1 ? 'exam' : 'study');
-
       const examD    = new Date((subj.examDate || '2026-05-31') + 'T12:00:00');
       const daysLeft = Math.ceil((examD - d) / 86400000);
-      const reason   = subj.grade < 5.5 ? `⚠ Critical — ${daysLeft}d` :
-                       subj.grade < 6.0 ? `At risk — ${daysLeft}d` :
-                       `${daysLeft}d to exam`;
+      const sessType = daysLeft <= 5 ? 'exam' :
+                       isSaturday ? 'exam' :
+                       (sessCount % examFreq === examFreq - 1 ? 'exam' : 'study');
+
+      const reason = subj.grade < 5.5 ? `⚠ Kritiek — ${daysLeft}d` :
+                     subj.grade < 6.0 ? `Risico — ${daysLeft}d` :
+                     `${daysLeft}d tot examen`;
 
       plan.push({
         id: `pi_${day}_${slot}`,
-        date: cursor,
-        subjectId: subj.id,
-        topic,
-        type: sessType,
-        lastScore: null,
-        reason,
-        done: false,
+        date: cursor, subjectId: subj.id, topic,
+        type: sessType, lastScore: null, reason, done: false,
       });
       schedCount[subj.id]++;
+      lastScheduled[subj.id] = cursor;
     }
     cursor = addDays(cursor, 1);
   }
@@ -2863,11 +2892,13 @@ function renderPlanning() {
     const subj = subjectById(p.subjectId);
     const ls = p.lastScore;
     const status = scoreStatus(ls);
-    const priority = ls ? (ls < 5.5 ? 'high' : ls < 6.5 ? 'med' : 'low') : (subj?.priority === 'high' ? 'med' : 'low');
+    // Priority dot color = subject's current average score status
+    const avg = subjectAvgScore(p.subjectId) ?? subj?.grade ?? null;
+    const dotStatus = scoreStatus(avg);
 
     tbody.innerHTML += `
       <tr>
-        <td><span class="priority-dot ${priority}"></span></td>
+        <td><span class="priority-dot ${dotStatus}"></span></td>
         <td>${fmtDate(p.date)}</td>
         <td><span class="chip" style="background:var(--bg3);color:var(--text2);border:1px solid var(--border)">${subj ? subj.name : p.subjectId}</span></td>
         <td>${p.topic}</td>
@@ -4640,11 +4671,35 @@ regeneratePlan = function() {
       added++; slotsFilled++;
     });
 
-    // PRIORITY 2: Score-optimized urgency scheduling
+    // PRIORITY 2: Check for starved subjects first (no session in last 7 days)
+    let chosenSubj = null;
+    if (slotsFilled < maxSlots) {
+      const starved = available.filter(s => {
+        if (alreadyOn.includes(s.id)) return false;
+        const lastSession = state.planning
+          .filter(p => p.subjectId === s.id && p.date <= cursor && p.date > addDays(cursor, -7))
+          .length;
+        return lastSession === 0;
+      });
+      if (starved.length) {
+        // Pick the starved subject with highest urgency
+        starved.sort((a, b) => enhancedUrgency(a, cursor) - enhancedUrgency(b, cursor));
+        chosenSubj = starved[0];
+      }
+    }
+
+    // PRIORITY 3: Score-optimized urgency scheduling
     const sorted = [...available].sort((a, b) => enhancedUrgency(a, cursor) - enhancedUrgency(b, cursor));
 
     for (let slot = slotsFilled; slot < maxSlots; slot++) {
-      const subj = sorted.find(s => !alreadyOn.includes(s.id));
+      let subj;
+      if (chosenSubj && slot === slotsFilled) {
+        // Use the starved subject for first open slot
+        subj = chosenSubj;
+        chosenSubj = null;
+      } else {
+        subj = sorted.find(s => !alreadyOn.includes(s.id));
+      }
       if (!subj) break;
       alreadyOn.push(subj.id);
 
