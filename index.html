@@ -8,9 +8,33 @@
 <meta name="apple-mobile-web-app-title" content="ExamOS">
 <meta name="theme-color" content="#0a0a0f">
 <title>ExamOS</title>
-<!-- SVG favicon / bookmark icon -->
+<!-- SVG favicon for browsers -->
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230a0a0f'/%3E%3Ctext x='6' y='44' font-family='system-ui' font-weight='800' font-size='28' fill='%23e8e8f0'%3EE%3C/text%3E%3Ctext x='28' y='44' font-family='system-ui' font-weight='800' font-size='28' fill='%239d97ff'%3EOS%3C/text%3E%3Crect x='6' y='50' width='52' height='3' rx='1.5' fill='%236c63ff'/%3E%3C/svg%3E">
-<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Crect width='180' height='180' rx='40' fill='%230a0a0f'/%3E%3Ctext x='16' y='120' font-family='system-ui' font-weight='800' font-size='78' fill='%23e8e8f0'%3EE%3C/text%3E%3Ctext x='76' y='120' font-family='system-ui' font-weight='800' font-size='78' fill='%239d97ff'%3EOS%3C/text%3E%3Crect x='16' y='138' width='148' height='8' rx='4' fill='%236c63ff'/%3E%3C/svg%3E">
+<!-- PNG icon generated on load for Apple dock/home screen -->
+<link rel="apple-touch-icon" id="apple-icon" href="">
+<script>
+// Generate 180x180 PNG icon for Apple dock using canvas
+(function(){
+  const c=document.createElement('canvas');c.width=180;c.height=180;
+  const x=c.getContext('2d');
+  // Background
+  x.fillStyle='#0a0a0f';
+  x.beginPath();x.roundRect(0,0,180,180,38);x.fill();
+  // "Exam" text
+  x.font='800 42px system-ui,-apple-system,sans-serif';
+  x.fillStyle='#e8e8f0';x.fillText('Exam',20,105);
+  // "OS" text in accent
+  x.fillStyle='#9d97ff';
+  const w=x.measureText('Exam').width;
+  x.fillText('OS',22+w,105);
+  // Accent bar
+  x.fillStyle='#6c63ff';
+  x.beginPath();x.roundRect(20,118,140,6,3);x.fill();
+  // Set as icon
+  const el=document.getElementById('apple-icon');
+  if(el)el.href=c.toDataURL('image/png');
+})();
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&family=Syne:wght@400;500;600;700;800&display=swap" rel="stylesheet">
