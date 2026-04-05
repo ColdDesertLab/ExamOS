@@ -13,7 +13,7 @@
 
 | Laag | Technologie |
 |------|-------------|
-| Frontend | Single HTML file (~5800 regels), vanilla JS, geen frameworks |
+| Frontend | Single HTML file (~6500 regels), vanilla JS, geen frameworks |
 | Styling | CSS custom properties, dark/light/auto theme, responsive (mobile/tablet/desktop) |
 | Data | localStorage + Supabase cloud sync (auto-save elke 2s + elke 5 min) |
 | AI | Anthropic Claude API + OpenAI API (optioneel) |
@@ -39,7 +39,7 @@ Alles zit in één bestand: `index.html` (= kopie van `ExamOS_v4.html`).
 | Stof & Topics | ≡ | Topic configuratie per vak, AI samenvattingen (Claude of GPT) |
 | Links & Info | ↗ | Examenwebsites, oude examens per jaar, formulebladen, benodigdheden checklist, strategie tips, AI studieassistent |
 | Handleiding | ? | Volledige gebruikershandleiding in het Nederlands |
-| Instellingen | ⊡ | API keys (Anthropic + OpenAI), SE cijfers, export/import JSON, 2-stap reset |
+| Instellingen | ⊡ | API keys, SE cijfers, studie verdeling (interactieve budget tabel), export/import JSON, 2-stap reset |
 
 ### State Object (localStorage + Supabase)
 
@@ -53,17 +53,37 @@ Alles zit in één bestand: `index.html` (= kopie van `ExamOS_v4.html`).
   examResults: [{ id, subjectId, year, ceGrade, score, maxScore, weakTopics, source }],
   notes: [{ id, date, subjectId, title, body }],
   planning: [{ id, date, subjectId, topic, type, lastScore, reason, done, sessionMins }],
+  stars: 0,                    // totaal verdiende sterren
+  starLog: [{ date, amount, reason }],
+  streak: { current, best, lastDate },
+  budgetOverrides: { [subjectId]: multiplier },  // handmatige gewicht-aanpassingen (default 1.0)
 }
 ```
 
 ## Planning Engine
 
-De planner is **examen-bewust** en **score-optimiserend**:
+De planner is **examen-bewust**, **score-optimiserend** en gebruikt een **gewogen budget-systeem**:
 
-### Score Optimalisatie
-- **Punt-opbrengst model**: vakken waar 1 extra studiesessie de meeste eindcijfer-punten oplevert krijgen prioriteit
-- Wiskunde B (SE 4.9) heeft de hoogste potentiële opbrengst → krijgt de meeste sessies
-- Nederlands (SE 7.5) heeft lage opbrengst → krijgt onderhoudssessies
+### Gewogen Budget Systeem
+Elk vak krijgt een sessie-budget op basis van:
+- **Score deficit**: `max(0, 6.5 - huidig_niveau)` — zwakkere vakken krijgen meer sessies
+- **Tijdsdruk**: `√(36 / dagen_tot_examen)` — eerdere examens krijgen front-loading
+- **Handmatige override**: instelbaar via Instellingen (0.2x – 3.0x multiplier)
+
+Voorbeeld verdeling (startdatum 5 april 2026):
+
+| Vak | SE | Budget | Aandeel |
+|-----|-----|--------|---------|
+| Wiskunde B | 4.9 | 19 | 27% |
+| Natuurkunde | 5.4 | 15 | 21% |
+| Scheikunde | 5.4 | 13 | 18% |
+| Biologie | 5.8 | 9 | 13% |
+| Geschiedenis | 6.4 | 4 | 6% |
+| Engels | 6.7 | 3 | 4% |
+| Nederlands | 7.5 | 3 | 4% |
+| Spaans | 6.5 | 3 | 4% |
+
+Na elk examen vallen slots vrij → resterende vakken vullen die automatisch.
 
 ### Examen-bewuste Scheduling
 
@@ -71,6 +91,7 @@ De planner is **examen-bewust** en **score-optimiserend**:
 |---------|-------|-------------|--------|
 | Normale studiedag | 1 | 90 min | Volle focus |
 | Zaterdag | 2 | 75 min | Dubbele sessie, iets korter |
+| Zondag | 1 | 60 min | Lichte sessie |
 | Examenweek (≤7d tot examen) | 2 | 55 min | Intensief, 2 vakken per dag |
 | Dag vóór 1 examen | 2 | 60 min | Examenvak verplicht + 2e vak |
 | Dag vóór dubbel examen | 2 | 60 min | Beide examenvakken herhalen |
@@ -78,10 +99,9 @@ De planner is **examen-bewust** en **score-optimiserend**:
 | Dubbele examendag (11 mei) | 0 | — | Geen studie |
 | Dag ná examen | 2 | 45 min | Minder energie, kortere sessies |
 | Dag ná dubbel examen | 1 | 45 min | Hersteldag |
-| Zondag | 0 | — | Rust |
 
 ### Adaptieve Herplanning
-- **Starvation-preventie**: elk vak minimaal 1 sessie per 7 dagen
+- **Budget-gestuurde spacing**: sessies worden gelijkmatig verdeeld over beschikbare dagen
 - **Comprehensie feedback**: lang gestudeerd (>60 min) + laag resultaat (<6.0) → eerder herpland
 - **AI Grader integratie**: zwakke onderwerpen uit nakijken worden automatisch ingepland
 
@@ -142,9 +162,28 @@ De planner is **examen-bewust** en **score-optimiserend**:
 - 2020 gemarkeerd als niet beschikbaar (COVID)
 - Examenkompas links per vak
 
+### Sterren & Gamification
+- **Sterren verdienen**: sessie afronden (+1), score ≥7.0 (+1), score ≥8.0 (+2), bonus activiteiten (+1)
+- **Streak systeem**: consecutive dagen met afgeronde sessies, milestones op 3d (+2), 7d (+5), 14d (+10)
+- **Week bonus**: alle sessies van de week af → +3 sterren
+- **Sidebar**: sterren-teller + streak in eigen card
+- **Dashboard**: sterren/streak stat card
+
+### Bonus Activiteiten (na dag-klaar)
+Na het afronden van de dagelijkse sessie verschijnen 4 bonus kaarten:
+1. **Extra Sessie** — nieuwe sessie voor het zwakste beschikbare vak
+2. **Fouten Herhaling** — interactieve review van laatste fouten, per fout "Begrepen" markeren
+3. **Theorie Uitleg** — opent AI samenvatting of formulekaart
+4. **Flashcard Quiz** — snelle herhaling met kaartjes
+
+### Studie Verdeling (Instellingen)
+- Interactieve tabel met per vak: SE, examendatum, budget, gedaan, resterend, aandeel-balk
+- +/- knoppen om gewicht per vak aan te passen (0.2x – 3.0x)
+- Herberekenen-knop past planning aan op nieuwe verdeling
+
 ### Dag Afsluiten (2-stap)
 1. Review modal: scores, projected eindcijfer, fouten, tijdsfeedback, herplanningspreview
-2. Bevestig → confetti animatie + comprehensie feedback + adaptieve herplanning
+2. Bevestig → confetti animatie + ster-toekenning + bonus kaarten + adaptieve herplanning
 
 ### Benodigdheden Checklist
 - Per categorie: schrijfmateriaal, wiskunde (GR, geodriehoek), BINAS, talen, algemeen
@@ -200,6 +239,9 @@ cd /Users/dennisariens/exam-os/
 # Bewerk het werkbestand
 # (ExamOS_v4.html)
 
+# Bootstrap: vers plan genereren en naar Supabase pushen
+node bootstrap.js
+
 # Kopieer, commit, deploy, push
 cp ExamOS_v4.html index.html
 git add -A && git commit -m "beschrijving"
@@ -213,6 +255,7 @@ git push
 |---------|---------|
 | `index.html` | Live versie (Vercel serveert dit) |
 | `ExamOS_v4.html` | Werkversie (bewerk dit bestand) |
+| `bootstrap.js` | Installer: genereert vers gewogen plan en pusht naar Supabase |
 | `CLAUDE.md` | Context voor Claude Code sessies |
 | `README.md` | Dit bestand |
 
