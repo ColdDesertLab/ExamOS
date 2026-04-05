@@ -741,6 +741,41 @@ tr:hover td { background: var(--bg3); }
   pointer-events: none;
 }
 
+/* ── STAR SYSTEM ── */
+@keyframes starEarn {
+  0% { transform: scale(0) rotate(-30deg); opacity: 0; }
+  50% { transform: scale(1.4) rotate(10deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0deg); opacity: 1; }
+}
+@keyframes starFloat {
+  0% { transform: translateY(0); opacity: 1; }
+  100% { transform: translateY(-40px); opacity: 0; }
+}
+@keyframes sidebarStarPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.3); }
+}
+.star-earn { animation: starEarn 0.6s cubic-bezier(0.34, 1.56, 0.64, 1); }
+.star-float { animation: starFloat 1.2s ease-out forwards; pointer-events: none; position: absolute; font-size: 24px; }
+.sidebar-star-pulse { animation: sidebarStarPulse 0.4s ease-in-out 3; }
+.bonus-card {
+  background: var(--bg3); border: 1px solid var(--border); border-radius: var(--r2);
+  padding: 16px; cursor: pointer; transition: all 0.2s; text-align: center;
+}
+.bonus-card:hover { border-color: var(--accent); background: var(--bg4); transform: translateY(-2px); }
+.bonus-card .bonus-icon { font-size: 28px; margin-bottom: 6px; }
+.bonus-card .bonus-title { font-family: var(--font-display); font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+.bonus-card .bonus-desc { font-size: 10px; color: var(--text3); }
+.bonus-card .bonus-star { font-size: 11px; color: var(--amber); margin-top: 6px; font-weight: 600; }
+.sidebar-gamify { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--text2); margin-bottom: 4px; font-family: var(--font-mono); }
+.sidebar-gamify .star-count { color: var(--amber); font-weight: 700; }
+.sidebar-gamify .streak-count { color: var(--red); font-weight: 700; }
+.mistake-review-card {
+  background: var(--bg3); border: 1px solid var(--border); border-radius: var(--r2);
+  padding: 16px; margin-bottom: 12px; transition: all 0.2s;
+}
+.mistake-review-card.reviewed { opacity: 0.5; border-color: var(--green); }
+
 /* ── BREAK OVERLAY ── */
 .break-overlay {
   position: fixed; inset: 0; z-index: 150;
@@ -922,6 +957,7 @@ tr:hover td { background: var(--bg3); }
       <div class="theme-pill-opt" data-mode="light" onclick="setThemeMode('light')">Light</div>
       <div class="theme-pill-opt" data-mode="system" onclick="setThemeMode('system')">Auto</div>
     </div>
+    <div class="sidebar-gamify" id="sidebar-gamify"></div>
     <div class="today-date" id="sidebar-date"></div>
     <div class="text-dim" id="days-to-exam"></div>
     <div id="sync-status" style="font-size:9px;color:var(--text3);margin-top:4px;letter-spacing:.04em">◉ Local</div>
@@ -1073,7 +1109,7 @@ tr:hover td { background: var(--bg3); }
   </div>
 
   <!-- Top stats row -->
-  <div class="grid-4 mb-20">
+  <div class="grid-4 mb-20" style="grid-template-columns:repeat(5,1fr)">
     <div class="card">
       <div class="stat-num text-green" id="stat-sessions">0</div>
       <div class="stat-label">Sessies gedaan</div>
@@ -1089,6 +1125,10 @@ tr:hover td { background: var(--bg3); }
     <div class="card">
       <div class="stat-num text-red" id="stat-critical">0</div>
       <div class="stat-label">Kritieke vakken</div>
+    </div>
+    <div class="card">
+      <div class="stat-num" style="color:var(--amber)" id="stat-stars">0</div>
+      <div class="stat-label">⭐ Sterren · <span id="stat-streak" style="color:var(--red)">0</span> 🔥</div>
     </div>
   </div>
 
@@ -2282,6 +2322,9 @@ function getDefaultData() {
     examResults: [],
     notes: [],
     planning: generateInitialPlan(),
+    stars: 0,
+    starLog: [],
+    streak: { current: 0, best: 0, lastDate: '' },
   };
 }
 
@@ -2449,6 +2492,9 @@ function getDayContext(cursor, d, subjects, examDayMap, examEveMap) {
   } else if (isSaturday) {
     maxSlots = 2; sessionMins = 75;
     reason = 'Zaterdag — dubbele sessie';
+  } else if (dow === 0) {
+    maxSlots = 1; sessionMins = 60;
+    reason = 'Zondag — lichte sessie';
   } else if (closestExamDays <= 7) {
     maxSlots = 2; sessionMins = 55;
     reason = 'Examenweek — intensief';
@@ -2463,93 +2509,129 @@ function getDayContext(cursor, d, subjects, examDayMap, examEveMap) {
 function generateInitialPlan() {
   const plan = [];
   const today = todayStr();
-  let cursor = today;
-  const schedCount = {};
-  const lastScheduled = {};
-  DEFAULT_SUBJECTS.forEach(s => { schedCount[s.id] = 0; lastScheduled[s.id] = ''; });
-
-  const lastExamDate = DEFAULT_SUBJECTS.reduce((l, s) => s.examDate > l ? s.examDate : l, '2026-05-11');
+  const subjs = DEFAULT_SUBJECTS;
+  const lastExamDate = subjs.reduce((l, s) => s.examDate > l ? s.examDate : l, '2026-05-11');
   const lastExamMs = new Date(lastExamDate + 'T12:00:00').getTime();
-  const { examDayMap, examEveMap } = buildExamMaps(DEFAULT_SUBJECTS);
+  const { examDayMap, examEveMap } = buildExamMaps(subjs);
 
+  // ═══ STEP 1: Count total available slots ═══
+  let totalSlots = 0;
+  let cursor = today;
+  const daySlots = [];
   for (let day = 0; day < 90; day++) {
     const d = new Date(cursor + 'T12:00:00');
     if (d.getTime() > lastExamMs) break;
-    if (d.getDay() === 0) { cursor = addDays(cursor, 1); continue; } // skip Sunday
+    const ctx = getDayContext(cursor, d, subjs, examDayMap, examEveMap);
+    if (ctx.maxSlots > 0) {
+      daySlots.push({ date: cursor, d, ctx });
+      totalSlots += ctx.maxSlots;
+    }
+    cursor = addDays(cursor, 1);
+  }
 
-    const ctx = getDayContext(cursor, d, DEFAULT_SUBJECTS, examDayMap, examEveMap);
-    if (ctx.maxSlots === 0) { cursor = addDays(cursor, 1); continue; }
+  // ═══ STEP 2: Calculate weight per subject ═══
+  const weights = {};
+  let totalWeight = 0;
+  subjs.forEach(s => {
+    const examD = new Date((s.examDate || '2026-05-31') + 'T12:00:00');
+    const daysLeft = Math.max(1, (examD - new Date(today + 'T12:00:00')) / 86400000);
+    if (daysLeft <= 0) { weights[s.id] = 0; return; }
+    const se = s.grade ?? 6;
+    const deficit = Math.max(0, 6.5 - se);
+    const timePressure = Math.sqrt(36 / daysLeft);
+    const w = Math.max(0.3, deficit * 1.5 + 0.5) * timePressure;
+    weights[s.id] = w;
+    totalWeight += w;
+  });
 
-    // Only subjects whose exam is still ahead AND not happening today
-    const available = DEFAULT_SUBJECTS.filter(s => {
+  // ═══ STEP 3: Convert weights to slot budgets ═══
+  const budget = {};
+  const scheduled = {};
+  const lastSched = {};
+  subjs.forEach(s => {
+    budget[s.id] = Math.round((weights[s.id] / totalWeight) * totalSlots);
+    scheduled[s.id] = 0;
+    lastSched[s.id] = '';
+  });
+
+  // ═══ STEP 4: Distribute sessions day-by-day ═══
+  let added = 0;
+  daySlots.forEach(({ date, d, ctx }) => {
+    const available = subjs.filter(s => {
       const ed = new Date((s.examDate || '2026-05-31') + 'T12:00:00');
-      return ed > d && !ctx.examsToday.includes(s.id);
+      return ed > d && !ctx.examsToday.includes(s.id) && weights[s.id] > 0;
     });
-    if (!available.length) { cursor = addDays(cursor, 1); continue; }
+    if (!available.length) return;
 
-    // Build queue: exam-eve first, then starved, then urgency
     const queue = [];
     const used = new Set();
 
-    // Exam-eve subjects get priority
+    // PRIORITY 1: Exam-eve subjects
     ctx.eveSubjects.forEach(sid => {
       if (queue.length >= ctx.maxSlots || used.has(sid)) return;
-      const s = DEFAULT_SUBJECTS.find(x => x.id === sid);
+      const s = subjs.find(x => x.id === sid);
       if (!s || ctx.examsToday.includes(sid)) return;
       queue.push({ subj: s, topic: 'Laatste herhaling', type: 'exam', reason: `⚡ Dag voor examen ${s.name}` });
       used.add(sid);
     });
 
-    // Starved subjects (no session in last 6 days)
+    // PRIORITY 2: Weighted budget distribution
     if (queue.length < ctx.maxSlots) {
-      const starved = available.filter(s => {
-        if (used.has(s.id)) return false;
-        if (!lastScheduled[s.id]) return true;
-        return (d - new Date(lastScheduled[s.id] + 'T12:00:00')) / 86400000 >= 6;
+      const candidates = available.filter(s => !used.has(s.id));
+      candidates.sort((a, b) => {
+        const budgetLeftA = budget[a.id] - scheduled[a.id];
+        const budgetLeftB = budget[b.id] - scheduled[b.id];
+        const edA = new Date((a.examDate || '2026-05-31') + 'T12:00:00');
+        const edB = new Date((b.examDate || '2026-05-31') + 'T12:00:00');
+        const daysA = Math.max(1, (edA - d) / 86400000);
+        const daysB = Math.max(1, (edB - d) / 86400000);
+        const gapA = lastSched[a.id] ? (d - new Date(lastSched[a.id] + 'T12:00:00')) / 86400000 : 999;
+        const gapB = lastSched[b.id] ? (d - new Date(lastSched[b.id] + 'T12:00:00')) / 86400000 : 999;
+        const idealGapA = daysA / Math.max(1, budgetLeftA);
+        const idealGapB = daysB / Math.max(1, budgetLeftB);
+        const overdueA = gapA >= idealGapA ? 1 : 0;
+        const overdueB = gapB >= idealGapB ? 1 : 0;
+        if (overdueA !== overdueB) return overdueB - overdueA;
+        return calcUrgency(a, date) - calcUrgency(b, date);
       });
-      starved.sort((a, b) => calcUrgency(a, cursor) - calcUrgency(b, cursor));
-      if (starved[0] && !used.has(starved[0].id)) {
-        used.add(starved[0].id);
-        queue.push({ subj: starved[0] });
-      }
+      candidates.forEach(s => {
+        if (queue.length >= ctx.maxSlots || used.has(s.id)) return;
+        if (scheduled[s.id] >= budget[s.id]) {
+          const othersHaveBudget = candidates.some(c => !used.has(c.id) && scheduled[c.id] < budget[c.id]);
+          if (othersHaveBudget) return;
+        }
+        queue.push({ subj: s });
+        used.add(s.id);
+      });
     }
-
-    // Fill remaining slots by urgency
-    const sorted = [...available].sort((a, b) => calcUrgency(a, cursor) - calcUrgency(b, cursor));
-    sorted.forEach(s => {
-      if (queue.length >= ctx.maxSlots || used.has(s.id)) return;
-      queue.push({ subj: s });
-      used.add(s.id);
-    });
 
     // Create plan entries
     queue.forEach((q, slot) => {
       const subj = q.subj;
       const topics = DEFAULT_TOPICS[subj.id] || ['Algemeen'];
-      const topic = q.topic || topics[schedCount[subj.id] % topics.length];
-      const sessCount = plan.filter(p => p.subjectId === subj.id).length;
+      const topic = q.topic || topics[scheduled[subj.id] % topics.length];
+      const sessCount = scheduled[subj.id];
       const examFreq = subj.grade < 5.5 ? 3 : 4;
       const examD = new Date((subj.examDate || '2026-05-31') + 'T12:00:00');
       const daysLeft = Math.ceil((examD - d) / 86400000);
       const sessType = q.type || (daysLeft <= 5 ? 'exam' : d.getDay() === 6 ? 'exam' : (sessCount % examFreq === examFreq - 1 ? 'exam' : 'study'));
 
-      let reason = q.reason || (subj.grade < 5.5 ? `⚠ Kritiek — ${daysLeft}d` :
-                                subj.grade < 6.0 ? `Risico — ${daysLeft}d` :
-                                `${daysLeft}d tot examen`);
-      // Add session duration hint
-      if (ctx.maxSlots >= 2) reason += ` · ${ctx.sessionMins}m`;
+      const budgetInfo = `${scheduled[subj.id]+1}/${budget[subj.id]}`;
+      let reason = q.reason || (subj.grade < 5.5 ? `⚠ Kritiek [${budgetInfo}] — ${daysLeft}d` :
+                                subj.grade < 6.0 ? `Risico [${budgetInfo}] — ${daysLeft}d` :
+                                `[${budgetInfo}] ${daysLeft}d tot examen`);
+      if (ctx.reason) reason += ` · ${ctx.reason}`;
 
       plan.push({
-        id: `pi_${day}_${slot}`, date: cursor, subjectId: subj.id, topic,
+        id: `pi_${added}_${slot}`, date, subjectId: subj.id, topic,
         type: sessType, lastScore: null, reason, done: false,
         sessionMins: ctx.sessionMins,
       });
-      schedCount[subj.id]++;
-      lastScheduled[subj.id] = cursor;
+      scheduled[subj.id]++;
+      lastSched[subj.id] = date;
+      added++;
     });
-
-    cursor = addDays(cursor, 1);
-  }
+  });
   return plan;
 }
 
@@ -2757,6 +2839,9 @@ function renderDashboard() {
     if (avg !== null) allExamScores.push(avg);
   });
   document.getElementById('stat-critical').textContent = criticalCount;
+  ensureStarState();
+  document.getElementById('stat-stars').textContent = state.stars;
+  document.getElementById('stat-streak').textContent = state.streak.current;
   if (allExamScores.length) {
     const overall = allExamScores.reduce((a,b)=>a+b,0)/allExamScores.length;
     const el = document.getElementById('stat-avg-exam');
@@ -3110,7 +3195,7 @@ function renderStudyLoadAnalysis() {
   let studyDays = 0;
   let cursor = new Date(today + 'T12:00:00');
   while (cursor <= lastExamD) {
-    if (cursor.getDay() !== 0) studyDays++;
+    studyDays++;
     cursor.setDate(cursor.getDate() + 1);
   }
 
@@ -3122,7 +3207,7 @@ function renderStudyLoadAnalysis() {
       </div>
       <div style="background:var(--bg3);border-radius:var(--r);padding:10px;text-align:center">
         <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em">Geschatte uren nodig</div>
-        <div style="font-family:var(--font-display);font-size:22px;font-weight:800;color:${totalHoursNeeded > studyDays * 2 ? 'var(--red)' : 'var(--text)'};margin-top:2px">~${totalHoursNeeded}</div>
+        <div style="font-family:var(--font-display);font-size:22px;font-weight:800;color:${totalHoursNeeded <= 0 ? 'var(--green)' : totalHoursNeeded > studyDays * 2 ? 'var(--red)' : 'var(--text)'};margin-top:2px">${totalHoursNeeded <= 0 ? '✓ Op schema' : '~' + totalHoursNeeded}</div>
       </div>
       <div style="background:var(--bg3);border-radius:var(--r);padding:10px;text-align:center">
         <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em">Gem. uren per dag</div>
@@ -3980,21 +4065,31 @@ function completeDay() {
     }
   }
 
+  // Star rewards
+  let starsEarned = 1; // base star for completing session
+  let starReasons = ['Sessie afgerond'];
+  if (scoreForAdaptive >= 8.0) { starsEarned += 2; starReasons.push('Score 8.0+'); }
+  else if (scoreForAdaptive >= 7.0) { starsEarned += 1; starReasons.push('Score 7.0+'); }
+
+  awardStar(starsEarned, starReasons.join(', '));
+  updateStreak();
+  checkWeeklyCompletion();
+
   saveData();
 
   // Show done state with celebration
-  showDayDone(session, ceScore, timeSpentMin);
+  showDayDone(session, ceScore, timeSpentMin, starsEarned);
 }
 
-function showDayDone(session, ceScore, timeSpentMin) {
+function showDayDone(session, ceScore, timeSpentMin, starsEarned) {
   const subj = subjectById(session.subjectId);
   const proj = projEindcijfer(session.subjectId);
   const nextSess = state.planning.find(p=>p.date===addDays(todayStr(),1)&&!p.done);
   const nextSubj = nextSess?subjectById(nextSess.subjectId):null;
+  starsEarned = starsEarned || 1;
 
   document.getElementById('today-content').style.display='none';
 
-  // Create done banner
   let doneEl = document.getElementById('today-done-state');
   if(!doneEl) {
     doneEl=document.createElement('div');
@@ -4003,19 +4098,17 @@ function showDayDone(session, ceScore, timeSpentMin) {
   }
 
   const projHtml = proj ? `<div class="done-slide" style="font-size:13px;margin-top:6px;animation-delay:0.4s">Proj. eindcijfer ${subj?.name}: <strong style="color:${proj>=6?'var(--green)':proj>=5.5?'var(--amber)':'var(--red)'}">${proj.toFixed(1)}</strong></div>` : '';
-
   const timeHtml = timeSpentMin ? `<div class="done-slide" style="font-size:12px;color:var(--text3);margin-top:4px;animation-delay:0.5s">⏱ ${timeSpentMin} min gestudeerd</div>` : '';
 
-  // Comprehension feedback
   let feedbackHtml = '';
   if(timeSpentMin && ceScore) {
     if(timeSpentMin > 60 && ceScore < 5.5) {
       feedbackHtml = `<div class="done-slide alert alert-critical" style="margin:16px auto;max-width:400px;text-align:left;animation-delay:0.6s">
-        <strong>Let op:</strong> ${timeSpentMin} min gestudeerd maar CE score ${ceScore.toFixed(1)} — dit onderwerp vraagt extra aandacht. Extra sessie ingepland.
+        <strong>Let op:</strong> ${timeSpentMin} min gestudeerd maar CE score ${ceScore.toFixed(1)} — dit onderwerp vraagt extra aandacht.
       </div>`;
     } else if(timeSpentMin > 45 && ceScore < 6.0) {
       feedbackHtml = `<div class="done-slide alert alert-warn" style="margin:16px auto;max-width:400px;text-align:left;animation-delay:0.6s">
-        <strong>Tip:</strong> Veel tijd besteed (${timeSpentMin} min) voor score ${ceScore.toFixed(1)} — overweeg een andere aanpak voor dit onderwerp.
+        <strong>Tip:</strong> Veel tijd besteed (${timeSpentMin} min) voor score ${ceScore.toFixed(1)} — overweeg een andere aanpak.
       </div>`;
     } else if(ceScore >= 7.0) {
       feedbackHtml = `<div class="done-slide alert alert-ok" style="margin:16px auto;max-width:400px;text-align:left;animation-delay:0.6s">
@@ -4024,28 +4117,65 @@ function showDayDone(session, ceScore, timeSpentMin) {
     }
   }
 
+  // Streak display
+  ensureStarState();
+  const streakHtml = state.streak.current >= 2 ? `<div class="done-slide" style="font-size:12px;color:var(--red);margin-top:4px;animation-delay:0.55s;font-weight:600">🔥 ${state.streak.current} dagen streak!</div>` : '';
+
+  // Has mistakes for this subject?
+  const hasMistakes = state.mistakeLog.filter(m => m.subjectId === session.subjectId).length > 0;
+  // Has API key for theory?
+  const hasApiKey = state.settings?.apiKey || state.settings?.openaiKey;
+
   doneEl.innerHTML=`
-    <div style="text-align:center;padding:60px 20px;max-width:560px;margin:0 auto;position:relative" id="done-container">
-      <div class="done-celebrate done-glow" style="display:inline-block;margin-bottom:16px;padding:20px;border-radius:50%">
-        <div style="font-size:56px">✅</div>
+    <div style="text-align:center;padding:40px 20px;max-width:560px;margin:0 auto;position:relative" id="done-container">
+      <div class="done-celebrate done-glow" style="display:inline-block;margin-bottom:12px;padding:16px;border-radius:50%">
+        <div style="font-size:48px">✅</div>
       </div>
-      <div class="done-slide" style="font-family:var(--font-display);font-size:30px;font-weight:800;color:var(--green);margin-bottom:8px;animation-delay:0.2s">Dag klaar!</div>
-      <div class="done-slide" style="font-size:13px;color:var(--text2);margin-bottom:6px;animation-delay:0.3s">${subj?.name||'?'} gedaan${ceScore?` — CE score: ${ceScore.toFixed(1)}`:''}</div>
+      <div class="done-slide" style="font-family:var(--font-display);font-size:28px;font-weight:800;color:var(--green);margin-bottom:6px;animation-delay:0.2s">Dag klaar!</div>
+      <div class="done-slide" style="font-size:13px;color:var(--text2);margin-bottom:4px;animation-delay:0.3s">${subj?.name||'?'} gedaan${ceScore?` — CE score: ${ceScore.toFixed(1)}`:''}</div>
       ${projHtml}
       ${timeHtml}
+      <div class="done-slide star-earn" style="font-size:18px;color:var(--amber);font-weight:700;margin-top:10px;animation-delay:0.45s">+${starsEarned} ⭐</div>
+      ${streakHtml}
       ${feedbackHtml}
-      ${nextSess?`<div class="done-slide alert alert-ok" style="margin:20px auto;max-width:400px;text-align:left;animation-delay:0.7s">
-        <strong>Morgen:</strong> ${nextSubj?.name||'?'} — ${nextSess.topic}<br>
-        <span style="font-size:10px">${nextSess.type==='exam'?'Oefenexamen':'Studiesessie'} · ${fmtDate(nextSess.date)}</span>
-      </div>`:'<div class="done-slide" style="font-size:12px;color:var(--text3);margin-top:16px;animation-delay:0.7s">Geen sessie gepland voor morgen.</div>'}
-      <div class="done-slide" style="margin-top:24px;background:var(--bg3);border:1px dashed var(--border2);border-radius:var(--r2);padding:16px;cursor:pointer;animation-delay:0.8s" onclick="startBonusRound()">
-        <div style="font-family:var(--font-display);font-size:14px;font-weight:600;margin-bottom:4px">+ Bonusronde</div>
-        <div style="font-size:11px;color:var(--text3)">Nog energie? Doe een extra sessie.</div>
+
+      ${nextSess?`<div class="done-slide" style="margin:16px auto;max-width:400px;text-align:left;animation-delay:0.7s;background:var(--bg3);border-radius:var(--r);padding:10px 14px;font-size:12px">
+        <strong>Morgen:</strong> ${nextSubj?.name||'?'} — ${nextSess.topic}
+        <span style="font-size:10px;color:var(--text3);margin-left:6px">${nextSess.type==='exam'?'Oefenexamen':'Studiesessie'}</span>
+      </div>`:'<div class="done-slide" style="font-size:12px;color:var(--text3);margin-top:12px;animation-delay:0.7s">Geen sessie gepland voor morgen.</div>'}
+
+      <div class="done-slide" style="margin-top:24px;animation-delay:0.8s">
+        <div style="font-family:var(--font-display);font-size:13px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px">Verdien extra sterren</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;max-width:400px;margin:0 auto">
+          <div class="bonus-card" onclick="startBonusRound()">
+            <div class="bonus-icon">📝</div>
+            <div class="bonus-title">Extra Sessie</div>
+            <div class="bonus-desc">Nog een oefensessie voor het zwakste vak</div>
+            <div class="bonus-star">+1 ⭐</div>
+          </div>
+          <div class="bonus-card" ${hasMistakes ? '' : 'style="opacity:0.4;pointer-events:none"'} onclick="startMistakeReview('${session.subjectId}')">
+            <div class="bonus-icon">🔄</div>
+            <div class="bonus-title">Fouten Herhaling</div>
+            <div class="bonus-desc">${hasMistakes ? 'Bekijk je laatste fouten opnieuw' : 'Nog geen fouten gelogd'}</div>
+            <div class="bonus-star">+1 ⭐</div>
+          </div>
+          <div class="bonus-card" onclick="startBonusTheory('${session.subjectId}')">
+            <div class="bonus-icon">📖</div>
+            <div class="bonus-title">Theorie Uitleg</div>
+            <div class="bonus-desc">${hasApiKey ? 'AI samenvatting van het onderwerp' : 'Bekijk de formulekaart'}</div>
+            <div class="bonus-star">+1 ⭐</div>
+          </div>
+          <div class="bonus-card" onclick="startBonusFlashcardQuiz('${session.subjectId}')">
+            <div class="bonus-icon">🃏</div>
+            <div class="bonus-title">Flashcard Quiz</div>
+            <div class="bonus-desc">Snelle herhaling met kaartjes</div>
+            <div class="bonus-star">+1 ⭐</div>
+          </div>
+        </div>
       </div>
     </div>`;
   doneEl.style.display='block';
 
-  // Spawn confetti
   spawnConfetti(document.getElementById('done-container'));
 }
 
@@ -4689,40 +4819,89 @@ function enhancedUrgency(subj, onDate) {
   return urgency;
 }
 
-// Override the regeneratePlan to use enhanced urgency + exam-aware scheduling
+// Override the regeneratePlan with weighted budget system
 const _origRegenerate = regeneratePlan;
 regeneratePlan = function() {
   const today = todayStr();
   state.planning = state.planning.filter(p => p.date < today || p.done);
 
   const subjs = state.subjects;
-  let cursor = today;
-  let added = 0;
-
   const lastExamDate = subjs.reduce((latest, s) => s.examDate && s.examDate > latest ? s.examDate : latest, '2026-05-11');
   const lastExamMs = new Date(lastExamDate + 'T12:00:00').getTime();
   const { examDayMap, examEveMap } = buildExamMaps(subjs);
 
-  for (let day = 0; day < 90 && added < 150; day++) {
+  // ═══ STEP 1: Count total available slots ═══
+  let totalSlots = 0;
+  let cursor = today;
+  const daySlots = []; // [{date, maxSlots, ctx}]
+  for (let day = 0; day < 90; day++) {
     const d = new Date(cursor + 'T12:00:00');
     if (d.getTime() > lastExamMs) break;
-    if (d.getDay() === 0) { cursor = addDays(cursor, 1); continue; }
-
     const ctx = getDayContext(cursor, d, subjs, examDayMap, examEveMap);
-    if (ctx.maxSlots === 0) { cursor = addDays(cursor, 1); continue; }
+    if (ctx.maxSlots > 0) {
+      daySlots.push({ date: cursor, d, ctx });
+      totalSlots += ctx.maxSlots;
+    }
+    cursor = addDays(cursor, 1);
+  }
 
+  // ═══ STEP 2: Calculate weight per subject ═══
+  // Weight = how much attention this subject needs relative to others
+  // Factors: SE grade (lower = more weight), days until exam (fewer = more weight),
+  //          practice scores (lower = more weight)
+  const weights = {};
+  let totalWeight = 0;
+  subjs.forEach(s => {
+    const examD = new Date((s.examDate || '2026-05-31') + 'T12:00:00');
+    const daysLeft = Math.max(1, (examD - new Date(today + 'T12:00:00')) / 86400000);
+    if (daysLeft <= 0) { weights[s.id] = 0; return; }
+
+    const se = s.grade ?? 6;
+    const avg = subjectAvgScore(s.id) ?? se;
+    const bestCE = bestCEScore(s.id);
+    const currentLevel = bestCE ?? avg;
+
+    // Grade deficit: how far below a safe 6.5?
+    // A 4.9 gets deficit 1.6, a 7.5 gets 0
+    const deficit = Math.max(0, 6.5 - currentLevel);
+
+    // Time pressure: exams sooner need more front-loading
+    // Normalize: 36 days = 1.0, 7 days = ~2.3, 53 days = ~0.8
+    const timePressure = Math.sqrt(36 / daysLeft);
+
+    // Base weight: deficit is the primary driver
+    // Minimum 0.3 so every subject gets SOME sessions
+    const w = Math.max(0.3, deficit * 1.5 + 0.5) * timePressure;
+    weights[s.id] = w;
+    totalWeight += w;
+  });
+
+  // ═══ STEP 3: Convert weights to slot budgets ═══
+  // Each subject gets a proportional share of total slots
+  const budget = {};
+  const scheduled = {}; // count of sessions scheduled so far
+  const lastSched = {}; // last date scheduled per subject
+  subjs.forEach(s => {
+    budget[s.id] = Math.round((weights[s.id] / totalWeight) * totalSlots);
+    scheduled[s.id] = 0;
+    lastSched[s.id] = '';
+  });
+
+  // ═══ STEP 4: Distribute sessions day-by-day ═══
+  let added = 0;
+  daySlots.forEach(({ date, d, ctx }) => {
     // Only subjects whose exam is still ahead AND not today
     const available = subjs.filter(s => {
       const ed = new Date((s.examDate || '2026-05-31') + 'T12:00:00');
-      return ed > d && !ctx.examsToday.includes(s.id);
+      return ed > d && !ctx.examsToday.includes(s.id) && weights[s.id] > 0;
     });
-    if (!available.length) { cursor = addDays(cursor, 1); continue; }
+    if (!available.length) return;
 
-    const alreadyOn = state.planning.filter(p => p.date === cursor && !p.done).map(p => p.subjectId);
+    const alreadyOn = state.planning.filter(p => p.date === date && !p.done).map(p => p.subjectId);
     const queue = [];
     const used = new Set(alreadyOn);
 
-    // PRIORITY 1: Exam-eve subjects
+    // PRIORITY 1: Exam-eve subjects (always override budget)
     ctx.eveSubjects.forEach(sid => {
       if (queue.length >= ctx.maxSlots || used.has(sid)) return;
       const subj = subjectById(sid);
@@ -4731,23 +4910,49 @@ regeneratePlan = function() {
       used.add(sid);
     });
 
-    // PRIORITY 2: Starved subjects (no session in 7 days)
+    // PRIORITY 2: Subjects with remaining budget, sorted by need
+    // "Need" = how much of their budget is still unscheduled + urgency
     if (queue.length < ctx.maxSlots) {
-      const starved = available.filter(s => {
-        if (used.has(s.id)) return false;
-        const recent = state.planning.filter(p => p.subjectId === s.id && p.date <= cursor && p.date > addDays(cursor, -7)).length;
-        return recent === 0;
-      });
-      starved.sort((a, b) => enhancedUrgency(a, cursor) - enhancedUrgency(b, cursor));
-      if (starved[0]) { queue.push({ subj: starved[0] }); used.add(starved[0].id); }
-    }
+      const candidates = available.filter(s => !used.has(s.id));
 
-    // PRIORITY 3: Urgency-sorted
-    const sorted = [...available].sort((a, b) => enhancedUrgency(a, cursor) - enhancedUrgency(b, cursor));
-    sorted.forEach(s => {
-      if (queue.length >= ctx.maxSlots || used.has(s.id)) return;
-      queue.push({ subj: s }); used.add(s.id);
-    });
+      candidates.sort((a, b) => {
+        const budgetLeftA = budget[a.id] - scheduled[a.id];
+        const budgetLeftB = budget[b.id] - scheduled[b.id];
+
+        // How many days until this subject's exam?
+        const edA = new Date((a.examDate || '2026-05-31') + 'T12:00:00');
+        const edB = new Date((b.examDate || '2026-05-31') + 'T12:00:00');
+        const daysA = Math.max(1, (edA - d) / 86400000);
+        const daysB = Math.max(1, (edB - d) / 86400000);
+
+        // Days since last scheduled
+        const gapA = lastSched[a.id] ? (d - new Date(lastSched[a.id] + 'T12:00:00')) / 86400000 : 999;
+        const gapB = lastSched[b.id] ? (d - new Date(lastSched[b.id] + 'T12:00:00')) / 86400000 : 999;
+
+        // Ideal spacing: spread sessions evenly across remaining days
+        const idealGapA = daysA / Math.max(1, budgetLeftA);
+        const idealGapB = daysB / Math.max(1, budgetLeftB);
+
+        // Is this subject "due" for a session? (gap >= ideal spacing)
+        const overdueA = gapA >= idealGapA ? 1 : 0;
+        const overdueB = gapB >= idealGapB ? 1 : 0;
+        if (overdueA !== overdueB) return overdueB - overdueA; // overdue first
+
+        // Among overdue (or both not overdue): most urgent first
+        return enhancedUrgency(a, date) - enhancedUrgency(b, date);
+      });
+
+      candidates.forEach(s => {
+        if (queue.length >= ctx.maxSlots || used.has(s.id)) return;
+        // Skip if budget exhausted AND there are others with budget left
+        if (scheduled[s.id] >= budget[s.id]) {
+          const othersHaveBudget = candidates.some(c => !used.has(c.id) && scheduled[c.id] < budget[c.id]);
+          if (othersHaveBudget) return;
+        }
+        queue.push({ subj: s });
+        used.add(s.id);
+      });
+    }
 
     // Create entries
     queue.forEach((q, slot) => {
@@ -4763,37 +4968,34 @@ regeneratePlan = function() {
         }
       }
 
-      const sessCount = state.planning.filter(p => p.subjectId === subj.id && p.done).length;
+      const sessCount = state.planning.filter(p => p.subjectId === subj.id && p.done).length + scheduled[subj.id];
       const examFreq = avg < 5.5 ? 3 : 4;
       const examD = new Date((subj.examDate || '2026-05-31') + 'T12:00:00');
       const daysLeft = Math.ceil((examD - d) / 86400000);
       const sessType = q.type || (daysLeft <= 5 ? 'exam' : d.getDay() === 6 ? 'exam' : (sessCount % examFreq === examFreq - 1 ? 'exam' : 'study'));
 
-      let reason = q.reason || (avg < 5.5 ? `⚠ Kritiek — ${daysLeft}d` :
-                                avg < 6.0 ? `Risico — ${daysLeft}d` :
-                                `${daysLeft}d tot examen`);
+      const budgetInfo = `${scheduled[subj.id]+1}/${budget[subj.id]}`;
+      let reason = q.reason || (avg < 5.5 ? `⚠ Kritiek [${budgetInfo}] — ${daysLeft}d` :
+                                avg < 6.0 ? `Risico [${budgetInfo}] — ${daysLeft}d` :
+                                `[${budgetInfo}] ${daysLeft}d tot examen`);
       if (ctx.reason) reason += ` · ${ctx.reason}`;
-      if (ctx.maxSlots >= 2 && !q.reason) reason += ` · ${ctx.sessionMins}m`;
-
-      const eff = studyEfficiency(subj.id);
-      if (eff && eff.avgScore < 5.5 && eff.avgTime > 50) reason += ' (wissel aanpak)';
 
       state.planning.push({
         id: 'pr_' + Date.now() + '_' + added,
-        date: cursor, subjectId: subj.id, topic: bestTopic, type: sessType,
+        date, subjectId: subj.id, topic: bestTopic, type: sessType,
         lastScore: topicLastScore(subj.id, bestTopic),
         reason, done: false,
         sessionMins: ctx.sessionMins,
       });
+      scheduled[subj.id]++;
+      lastSched[subj.id] = date;
       added++;
     });
-
-    cursor = addDays(cursor, 1);
-  }
+  });
 
   saveData();
   renderPlanning();
-  showToast('Plan herberekend — examenrooster, energie en dubbele sessies meegenomen');
+  showToast(`Plan herberekend — ${added} sessies, gewogen op score + examendatum`);
 };
 
 // ══════════════════════════════════════════
@@ -5798,13 +6000,222 @@ function sendNotification(title, body) {
 }
 
 // ══════════════════════════════════════════
+// STAR & STREAK SYSTEM
+// ══════════════════════════════════════════
+
+function ensureStarState() {
+  if (!state.stars && state.stars !== 0) state.stars = 0;
+  if (!state.starLog) state.starLog = [];
+  if (!state.streak) state.streak = { current: 0, best: 0, lastDate: '' };
+}
+
+function awardStar(amount, reason, container) {
+  ensureStarState();
+  state.stars += amount;
+  state.starLog.push({ date: todayStr(), amount, reason });
+  saveData();
+  updateSidebarGamify();
+
+  // Animate floating star at container
+  if (container) {
+    for (let i = 0; i < amount; i++) {
+      const star = document.createElement('div');
+      star.className = 'star-float';
+      star.textContent = '⭐';
+      star.style.left = (40 + Math.random() * 20) + '%';
+      star.style.top = '30%';
+      star.style.animationDelay = (i * 0.3) + 's';
+      container.appendChild(star);
+      setTimeout(() => star.remove(), 1500 + i * 300);
+    }
+  }
+
+  // Pulse sidebar star counter
+  const sidebarStar = document.getElementById('sidebar-star-count');
+  if (sidebarStar) {
+    sidebarStar.classList.remove('sidebar-star-pulse');
+    void sidebarStar.offsetWidth;
+    sidebarStar.classList.add('sidebar-star-pulse');
+    sidebarStar.textContent = state.stars;
+  }
+}
+
+function updateStreak() {
+  ensureStarState();
+  const today = todayStr();
+  const yesterday = addDays(today, -1);
+  const dayBeforeYesterday = addDays(today, -2);
+
+  if (state.streak.lastDate === today) return; // already counted today
+
+  if (state.streak.lastDate === yesterday) {
+    state.streak.current++;
+  } else if (state.streak.lastDate === '') {
+    state.streak.current = 1;
+  } else {
+    state.streak.current = 1; // streak broken
+  }
+
+  state.streak.lastDate = today;
+  if (state.streak.current > state.streak.best) state.streak.best = state.streak.current;
+
+  // Streak milestones
+  if (state.streak.current === 3) awardStar(2, '3-daagse streak');
+  if (state.streak.current === 7) awardStar(5, '7-daagse streak');
+  if (state.streak.current === 14) awardStar(10, '14-daagse streak');
+
+  saveData();
+}
+
+function updateSidebarGamify() {
+  ensureStarState();
+  const el = document.getElementById('sidebar-gamify');
+  if (!el) return;
+  el.innerHTML = `
+    <span class="star-count" id="sidebar-star-count">${state.stars}</span> ⭐
+    <span style="color:var(--border2)">│</span>
+    <span class="streak-count">${state.streak.current}</span> 🔥
+  `;
+}
+
+function getStarsEarnedToday() {
+  ensureStarState();
+  const today = todayStr();
+  return state.starLog.filter(l => l.date === today).reduce((sum, l) => sum + l.amount, 0);
+}
+
+// Bonus activities from dag-klaar screen
+function startMistakeReview(subjectId) {
+  const mistakes = state.mistakeLog.filter(m => m.subjectId === subjectId).slice(-10).reverse();
+  if (!mistakes.length) {
+    showToast('Geen fouten gevonden voor dit vak');
+    return;
+  }
+
+  const doneEl = document.getElementById('today-done-state');
+  if (!doneEl) return;
+
+  let reviewedCount = 0;
+  const totalNeeded = Math.min(3, mistakes.length);
+
+  function renderMistakes() {
+    doneEl.innerHTML = `
+      <div style="max-width:560px;margin:0 auto;padding:30px 20px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+          <div>
+            <div style="font-family:var(--font-display);font-size:20px;font-weight:800">🔄 Fouten Herhaling</div>
+            <div style="font-size:11px;color:var(--text3)">${reviewedCount}/${totalNeeded} herzien — ${totalNeeded - reviewedCount > 0 ? 'nog ' + (totalNeeded - reviewedCount) + ' voor ⭐' : '⭐ verdiend!'}</div>
+          </div>
+          <button class="btn btn-ghost btn-sm" onclick="backToDayDone()">✕ Sluiten</button>
+        </div>
+        ${mistakes.map((m, i) => `
+          <div class="mistake-review-card ${m._reviewed ? 'reviewed' : ''}" id="mistake-review-${i}">
+            <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:8px">
+              <div>
+                <span style="font-size:12px;font-weight:600;color:var(--accent)">${m.code || 'Fout'}</span>
+                <span style="font-size:10px;color:var(--text3);margin-left:8px">${m.topic || ''} · ${fmtDate(m.date)}</span>
+              </div>
+              ${m.questionNum ? `<span style="font-size:10px;color:var(--text3)">Vr. ${m.questionNum}</span>` : ''}
+            </div>
+            <div style="font-size:12px;color:var(--text2);margin-bottom:8px">${m.description || 'Geen beschrijving'}</div>
+            ${m.action ? `<div style="font-size:11px;color:var(--green);margin-bottom:10px">💡 ${m.action}</div>` : ''}
+            ${!m._reviewed ? `<button class="btn btn-primary btn-sm" onclick="markMistakeReviewed(${i})">✓ Begrepen</button>` : '<span style="font-size:11px;color:var(--green)">✓ Herzien</span>'}
+          </div>
+        `).join('')}
+        ${reviewedCount >= totalNeeded ? `
+          <div style="text-align:center;margin-top:20px">
+            <div class="star-earn" style="font-size:36px;margin-bottom:8px">⭐</div>
+            <div style="font-size:13px;color:var(--amber);font-weight:600">+1 ster verdiend!</div>
+            <button class="btn btn-primary" style="margin-top:12px" onclick="backToDayDone()">Terug</button>
+          </div>
+        ` : ''}
+      </div>`;
+  }
+
+  window.markMistakeReviewed = function(idx) {
+    mistakes[idx]._reviewed = true;
+    reviewedCount++;
+    if (reviewedCount === totalNeeded) {
+      awardStar(1, 'Fouten herhaling', doneEl);
+    }
+    renderMistakes();
+  };
+
+  renderMistakes();
+}
+
+function startBonusFlashcardQuiz(subjectId) {
+  const subj = subjectById(subjectId);
+  if (!subj) return;
+
+  // Switch to notes page with flashcards tab
+  showPage('notes');
+  switchNotesTab('flashcards');
+  showToast(`Flashcard quiz: ${subj.name} — scoor 80%+ voor ⭐`);
+
+  // Track that this is a bonus quiz for star awarding
+  window._bonusQuizActive = { subjectId, startTime: Date.now() };
+}
+
+function startBonusTheory(subjectId) {
+  const subj = subjectById(subjectId);
+  if (!subj) return;
+
+  // Switch to topics page for this subject
+  showPage('topics');
+  _topicActiveSubject = subjectId;
+  renderTopicsPage();
+  showToast(`Theorie: ${subj.name} — bestudeer een onderwerp voor ⭐`);
+
+  // Award star after viewing (they engaged with theory)
+  setTimeout(() => {
+    if (document.getElementById('page-topics')?.classList.contains('active')) {
+      awardStar(1, 'Theorie bestudeerd: ' + subj.name);
+      showToast('⭐ +1 ster voor theorie studie!');
+    }
+  }, 120000); // 2 min minimum engagement
+}
+
+function backToDayDone() {
+  // Re-render the day done state
+  const lastSession = state.planning.filter(p => p.date === todayStr() && p.done).pop();
+  if (lastSession) {
+    const ceScore = state.examResults.filter(r => r.subjectId === lastSession.subjectId && r.date === todayStr()).pop()?.ceGrade;
+    const logEntry = state.studyLog.filter(l => l.subjectId === lastSession.subjectId && l.date === todayStr()).pop();
+    showDayDone(lastSession, ceScore || null, logEntry?.timeSpentMin || null);
+  }
+}
+
+// Check if all sessions for this week are done → bonus stars
+function checkWeeklyCompletion() {
+  ensureStarState();
+  const today = todayStr();
+  const todayD = new Date(today + 'T12:00:00');
+  const dow = todayD.getDay();
+  // Only check on Friday/Saturday
+  if (dow !== 5 && dow !== 6) return;
+
+  const weekStart = addDays(today, -(dow === 0 ? 6 : dow - 1));
+  const weekSessions = state.planning.filter(p => p.date >= weekStart && p.date <= today);
+  const allDone = weekSessions.length > 0 && weekSessions.every(p => p.done);
+  const alreadyAwarded = state.starLog.some(l => l.date >= weekStart && l.reason === 'Week compleet');
+
+  if (allDone && !alreadyAwarded && weekSessions.length >= 3) {
+    awardStar(3, 'Week compleet');
+    showToast('⭐ +3 sterren — alle sessies van deze week af!');
+  }
+}
+
+// ══════════════════════════════════════════
 // INIT
 // ══════════════════════════════════════════
 
 function init() {
   ensureNotes();
+  ensureStarState();
   initTheme();
   updateSidebarDate();
+  updateSidebarGamify();
   setInterval(updateSidebarDate, 60000);
   populateMistakeFilterSubjects();
   initGraderSubjects();
