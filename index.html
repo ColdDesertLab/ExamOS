@@ -6733,6 +6733,120 @@ function checkWizardOnLoad() {
 // INIT
 // ══════════════════════════════════════════
 
+// ══════════════════════════════════════════
+// AUTO-UPDATE DETECTION
+// ══════════════════════════════════════════
+// Uses HTTP ETag + Last-Modified headers that Vercel sets on static files.
+// Polls every 5 minutes; if headers changed, shows a banner with reload button.
+// State (localStorage + Supabase) is preserved across reloads.
+
+let _initialVersionTag = null;
+let _updateBannerShown = false;
+
+async function checkForUpdates() {
+  try {
+    // Skip when running from file:// or local dev (no cache headers)
+    if (!location.href.startsWith('http')) return;
+
+    const resp = await fetch(location.href, {
+      method: 'HEAD',
+      cache: 'no-cache',
+    });
+    if (!resp.ok) return;
+
+    const tag = resp.headers.get('etag') || resp.headers.get('last-modified');
+    if (!tag) return;
+
+    if (_initialVersionTag === null) {
+      _initialVersionTag = tag;
+      return;
+    }
+    if (tag !== _initialVersionTag && !_updateBannerShown) {
+      showUpdateBanner();
+    }
+  } catch(e) { /* offline or CORS — silent fail */ }
+}
+
+function showUpdateBanner() {
+  if (_updateBannerShown || document.getElementById('update-banner')) return;
+  _updateBannerShown = true;
+
+  const bar = document.createElement('div');
+  bar.id = 'update-banner';
+  bar.innerHTML = `
+    <span style="font-size:16px">⬆</span>
+    <div style="flex:1">
+      <div style="font-weight:600;font-size:13px">Nieuwe versie beschikbaar</div>
+      <div style="font-size:10px;opacity:0.85;margin-top:1px">Je voortgang blijft bewaard</div>
+    </div>
+    <button onclick="applyUpdate()" style="background:white;color:var(--accent);border:none;padding:8px 16px;border-radius:6px;font-weight:700;font-size:12px;cursor:pointer;font-family:var(--font-mono)">HERLAAD</button>
+    <button onclick="dismissUpdateBanner()" style="background:transparent;color:white;border:none;cursor:pointer;font-size:20px;padding:4px 8px;opacity:0.7" title="Later">×</button>
+  `;
+  bar.style.cssText = `
+    position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:9999;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));color:white;
+    padding:12px 16px;border-radius:12px;
+    box-shadow:0 8px 32px rgba(108,99,255,0.4),0 0 0 1px rgba(255,255,255,0.1);
+    display:flex;align-items:center;gap:12px;
+    animation:slideUp 0.4s cubic-bezier(0.34,1.56,0.64,1);
+    max-width:420px;width:calc(100% - 40px);
+    backdrop-filter:blur(10px);
+  `;
+  document.body.appendChild(bar);
+}
+
+async function applyUpdate() {
+  // Save state one final time before reload to catch any unsaved changes
+  try {
+    saveDataLocal();
+    await cloudSave(state);
+  } catch(e) {}
+  // Hard reload — bypasses cache
+  location.reload();
+}
+
+function dismissUpdateBanner() {
+  const bar = document.getElementById('update-banner');
+  if (bar) bar.remove();
+  // Keep _updateBannerShown = true so we don't re-show until another update arrives
+}
+
+// ══════════════════════════════════════════
+// STATE SCHEMA MIGRATIONS
+// ══════════════════════════════════════════
+// Framework for evolving state shape across versions without data loss.
+// Each migration adds new fields or transforms existing ones — never removes.
+
+const CURRENT_SCHEMA_VERSION = 2;
+
+function migrateState() {
+  if (!state) return;
+  if (!state.schemaVersion) state.schemaVersion = 1; // legacy state pre-migrations
+
+  let migrated = false;
+
+  // v1 → v2: ensure all 2026-era fields exist (wizard, stars, streak, budget, AI models)
+  if (state.schemaVersion < 2) {
+    state.stars = state.stars ?? 0;
+    state.starLog = state.starLog || [];
+    state.streak = state.streak || { current: 0, best: 0, lastDate: '' };
+    state.budgetOverrides = state.budgetOverrides || {};
+    state.wizardCompleted = state.wizardCompleted ?? true;
+    state.settings = state.settings || {};
+    state.settings.aiModels = state.settings.aiModels || {};
+    state.schemaVersion = 2;
+    migrated = true;
+    console.log('Migrated state v1 → v2');
+  }
+
+  // Future migrations: add v2 → v3 etc. Each one bumps schemaVersion.
+
+  if (migrated) {
+    saveData();
+    showToast('App bijgewerkt naar nieuwe versie');
+  }
+}
+
 // Detect verlopen (past) undone sessies en herbereken automatisch
 function checkStalePlanning() {
   if (!state.planning || !state.planning.length) return false;
@@ -6757,6 +6871,7 @@ function checkStalePlanning() {
 async function init() {
   ensureNotes();
   ensureStarState();
+  migrateState();
   initTheme();
   updateSidebarDate();
   updateSidebarGamify();
@@ -6767,9 +6882,10 @@ async function init() {
   // Request notification permission
   requestNotifications();
 
-  // Cloud sync on startup — wait for it, then check stale planning
+  // Cloud sync on startup — wait for it, then migrate (again, in case cloud state is older)
   try {
     await syncOnLoad();
+    migrateState();
   } catch(e) {
     console.warn('Initial sync failed:', e);
   }
@@ -6780,6 +6896,9 @@ async function init() {
   renderToday();
   checkWizardOnLoad();
 
+  // Baseline version tag (for update detection)
+  checkForUpdates();
+
   // Auto-sync every 5 minutes while open
   setInterval(async () => {
     try {
@@ -6787,6 +6906,9 @@ async function init() {
       updateSyncIndicator('synced');
     } catch(e) { updateSyncIndicator('local'); }
   }, 5 * 60 * 1000);
+
+  // Check for new deploys every 5 minutes
+  setInterval(checkForUpdates, 5 * 60 * 1000);
 }
 
 // Boot: check auth first
