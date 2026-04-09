@@ -10,6 +10,8 @@
 
 **[📱 Live App](https://exam-os-three.vercel.app)** · **[📖 Setup Guide](#-getting-started)** · **[🎯 Features](#features)**
 
+![Vandaag dashboard](docs/screenshots/01-vandaag.png)
+
 </div>
 
 ---
@@ -99,6 +101,18 @@ Sync indicator in sidebar toont real-time status.
 
 ---
 
+## 📸 Screenshots
+
+| | |
+|---|---|
+| ![Planning](docs/screenshots/02-planning.png) | ![Dashboard](docs/screenshots/04-dashboard.png) |
+| Planning page met examenrooster + studielast analyse | Dashboard met sessies, sterren, subject cards |
+
+![Studie Verdeling Tabel](docs/screenshots/03-studie-verdeling.png)
+> Interactieve studie verdeling in Instellingen — pas het gewicht per vak aan met +/- knoppen
+
+---
+
 ## ⚙️ Smart Features
 
 ### Auto-recalculate bij stale planning
@@ -119,6 +133,27 @@ Als je een paar dagen niet opent (ziek, vakantie, vergeten), detecteert de app v
 2. **Fouten Herhaling** — interactieve review van laatste fouten
 3. **Theorie Uitleg** — AI samenvatting of formulekaart
 4. **Flashcard Quiz** — snelle herhaling met kaartjes
+
+---
+
+## 🤖 AI Features — Hoe werkt de API?
+
+De app zelf (planner, timer, foutenlog, sterren, wizard) **werkt zonder API key**. Alleen de AI-features vereisen een key:
+
+| Feature | API nodig | Waar invoegen |
+|---------|-----------|---------------|
+| Planner, timer, sterren, foutenlog | ❌ Nee | — |
+| AI Grader (examens nakijken) | ✅ Anthropic | Instellingen → API Keys |
+| Quiz Generator | ✅ Anthropic of OpenAI | Instellingen → API Keys |
+| AI Studieassistent (chat) | ✅ Anthropic of OpenAI | Instellingen → API Keys |
+| Topic samenvattingen | ✅ Anthropic of OpenAI | Instellingen → API Keys |
+
+**Belangrijk:** Dit is de **Anthropic API / OpenAI API** (pay-per-token), **niet je Claude.ai of ChatGPT abonnement**. Die abonnementen geven geen API-toegang.
+
+- **Anthropic API key**: [console.anthropic.com/settings/keys](https://console.anthropic.com/settings/keys) — credit kopen vanaf $5
+- **OpenAI API key**: [platform.openai.com/api-keys](https://platform.openai.com/api-keys) — prepaid credit
+
+Keys worden **lokaal opgeslagen** in je browser en direct naar de API gestuurd (geen tussenserver). Typisch gebruik: één examen nakijken ≈ $0.05-0.15 Claude / $0.02-0.08 GPT-4o.
 
 ---
 
