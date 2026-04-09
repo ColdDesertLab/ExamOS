@@ -6663,7 +6663,28 @@ function checkWizardOnLoad() {
 // INIT
 // ══════════════════════════════════════════
 
-function init() {
+// Detect verlopen (past) undone sessies en herbereken automatisch
+function checkStalePlanning() {
+  if (!state.planning || !state.planning.length) return false;
+  const today = todayStr();
+  const stale = state.planning.filter(p => !p.done && p.date < today);
+  if (stale.length > 0) {
+    console.log(`Planning stale: ${stale.length} verlopen sessies — auto-recalculating`);
+    try {
+      // Drop verlopen undone sessies (keep history van afgeronde sessies)
+      state.planning = state.planning.filter(p => p.done || p.date >= today);
+      regeneratePlan();
+      showToast(`Planning bijgewerkt — ${stale.length} verlopen sessies herverdeeld`);
+      return true;
+    } catch(e) {
+      console.warn('Auto-recalc failed:', e);
+      return false;
+    }
+  }
+  return false;
+}
+
+async function init() {
   ensureNotes();
   ensureStarState();
   initTheme();
@@ -6672,14 +6693,22 @@ function init() {
   setInterval(updateSidebarDate, 60000);
   populateMistakeFilterSubjects();
   initGraderSubjects();
-  renderToday();
-  checkWizardOnLoad();
 
   // Request notification permission
   requestNotifications();
 
-  // Cloud sync on startup (non-blocking)
-  syncOnLoad().catch(e => console.warn('Initial sync failed:', e));
+  // Cloud sync on startup — wait for it, then check stale planning
+  try {
+    await syncOnLoad();
+  } catch(e) {
+    console.warn('Initial sync failed:', e);
+  }
+
+  // After sync: if planning has verlopen undone sessies, auto-regenerate
+  checkStalePlanning();
+
+  renderToday();
+  checkWizardOnLoad();
 
   // Auto-sync every 5 minutes while open
   setInterval(async () => {
