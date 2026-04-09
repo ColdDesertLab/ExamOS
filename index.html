@@ -7,6 +7,8 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="ExamOS">
 <meta name="theme-color" content="#0a0a0f">
+<meta name="description" content="VWO Eindexamen Training System — gewogen planner, AI nakijken, fouten-analyse">
+<link rel="manifest" href="manifest.json">
 <title>ExamOS</title>
 <!-- SVG favicon for browsers -->
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230a0a0f'/%3E%3Ctext x='6' y='44' font-family='system-ui' font-weight='800' font-size='28' fill='%23e8e8f0'%3EE%3C/text%3E%3Ctext x='28' y='44' font-family='system-ui' font-weight='800' font-size='28' fill='%239d97ff'%3EOS%3C/text%3E%3Crect x='6' y='50' width='52' height='3' rx='1.5' fill='%236c63ff'/%3E%3C/svg%3E">
@@ -177,14 +179,17 @@ body::before {
 }
 
 .sidebar-footer {
-  padding: 16px 20px;
+  padding: 14px 16px;
   border-top: 1px solid var(--border);
   font-size: 11px; color: var(--text3);
+  display: flex; flex-direction: column; gap: 10px;
+}
+.sidebar-footer-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
 }
 .today-date {
   font-family: var(--font-display);
   font-size: 13px; color: var(--text2);
-  margin-bottom: 2px;
 }
 
 /* ── MAIN ── */
@@ -647,7 +652,7 @@ tr:hover td { background: var(--bg3); }
 .theme-pill {
   display: flex; border-radius: 20px;
   background: var(--bg4); border: 1px solid var(--border);
-  padding: 2px; margin: 8px 20px; user-select: none;
+  padding: 2px; user-select: none;
 }
 .theme-pill-opt {
   flex: 1; text-align: center; padding: 4px 0;
@@ -741,6 +746,20 @@ tr:hover td { background: var(--bg3); }
   pointer-events: none;
 }
 
+/* ── SETUP WIZARD ── */
+.wiz-step-bar { flex: 1; height: 4px; background: var(--border); border-radius: 2px; transition: background 0.3s; }
+.wiz-step-bar.active { background: var(--accent); }
+.wiz-step-bar.completed { background: var(--green); }
+.wiz-card { background: var(--bg3); border: 1px solid var(--border); border-radius: var(--r2); padding: 24px; margin-bottom: 16px; }
+.wiz-title { font-family: var(--font-display); font-size: 24px; font-weight: 800; color: var(--text); margin-bottom: 8px; }
+.wiz-sub { font-size: 13px; color: var(--text2); margin-bottom: 20px; line-height: 1.5; }
+.wiz-subject-row { display: grid; grid-template-columns: 1fr 80px 140px 80px; gap: 10px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 12px; }
+.wiz-subject-row input { padding: 6px 10px; font-size: 12px; background: var(--bg4); border: 1px solid var(--border); border-radius: var(--r); color: var(--text); }
+.wiz-subject-checkbox { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: var(--bg3); border: 1px solid var(--border); border-radius: var(--r); margin-bottom: 6px; cursor: pointer; transition: all 0.15s; }
+.wiz-subject-checkbox:hover { border-color: var(--accent); }
+.wiz-subject-checkbox.checked { background: var(--accent-glow); border-color: var(--accent); }
+.wiz-subject-checkbox input { margin: 0; }
+
 /* ── STAR SYSTEM ── */
 @keyframes starEarn {
   0% { transform: scale(0) rotate(-30deg); opacity: 0; }
@@ -767,7 +786,7 @@ tr:hover td { background: var(--bg3); }
 .bonus-card .bonus-title { font-family: var(--font-display); font-size: 13px; font-weight: 600; margin-bottom: 4px; }
 .bonus-card .bonus-desc { font-size: 10px; color: var(--text3); }
 .bonus-card .bonus-star { font-size: 11px; color: var(--amber); margin-top: 6px; font-weight: 600; }
-.sidebar-gamify { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--text2); margin-bottom: 4px; font-family: var(--font-mono); }
+.sidebar-gamify { display: flex; align-items: center; gap: 12px; font-size: 12px; color: var(--text2); font-family: var(--font-mono); padding: 8px 12px; background: var(--bg3); border-radius: var(--r); border: 1px solid var(--border); }
 .sidebar-gamify .star-count { color: var(--amber); font-weight: 700; }
 .sidebar-gamify .streak-count { color: var(--red); font-weight: 700; }
 .mistake-review-card {
@@ -952,18 +971,22 @@ tr:hover td { background: var(--bg3); }
     </div>
   </div>
   <div class="sidebar-footer">
-    <div class="theme-pill" id="theme-pill">
-      <div class="theme-pill-opt" data-mode="dark" onclick="setThemeMode('dark')">Dark</div>
-      <div class="theme-pill-opt" data-mode="light" onclick="setThemeMode('light')">Light</div>
-      <div class="theme-pill-opt" data-mode="system" onclick="setThemeMode('system')">Auto</div>
-    </div>
     <div class="sidebar-gamify" id="sidebar-gamify"></div>
-    <div class="today-date" id="sidebar-date"></div>
-    <div class="text-dim" id="days-to-exam"></div>
-    <div id="sync-status" style="font-size:9px;color:var(--text3);margin-top:4px;letter-spacing:.04em">◉ Local</div>
-    <button onclick="doLogout()" style="width:100%;margin-top:8px;padding:6px 0;background:transparent;border:1px solid var(--border);border-radius:var(--r);color:var(--text3);font-family:var(--font-mono);font-size:10px;cursor:pointer;transition:all 0.15s;letter-spacing:.04em"
-      onmouseover="this.style.borderColor='var(--red)';this.style.color='var(--red)'"
-      onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text3)'">↪ Uitloggen</button>
+    <div>
+      <div class="today-date" id="sidebar-date"></div>
+      <div class="text-dim" id="days-to-exam" style="font-size:10px;margin-top:2px"></div>
+    </div>
+    <div class="sidebar-footer-row">
+      <div class="theme-pill" id="theme-pill" style="flex:1">
+        <div class="theme-pill-opt" data-mode="dark" onclick="setThemeMode('dark')">Dark</div>
+        <div class="theme-pill-opt" data-mode="light" onclick="setThemeMode('light')">Light</div>
+        <div class="theme-pill-opt" data-mode="system" onclick="setThemeMode('system')">Auto</div>
+      </div>
+      <button onclick="doLogout()" style="padding:4px 10px;background:transparent;border:1px solid var(--border);border-radius:var(--r);color:var(--text3);font-family:var(--font-mono);font-size:10px;cursor:pointer;transition:all 0.15s;letter-spacing:.04em;white-space:nowrap"
+        onmouseover="this.style.borderColor='var(--red)';this.style.color='var(--red)'"
+        onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text3)'">↪ Uit</button>
+    </div>
+    <div id="sync-status" style="font-size:9px;color:var(--text3);letter-spacing:.04em;text-align:center">◉ Local</div>
   </div>
 </nav>
 
@@ -1491,6 +1514,12 @@ tr:hover td { background: var(--bg3); }
       <button class="btn btn-primary btn-sm" onclick="exportData()">↓ Exporteer data (JSON)</button>
       <button class="btn btn-ghost btn-sm" onclick="importData()">↑ Importeer data</button>
     </div>
+  </div>
+
+  <div class="card mt-16">
+    <div class="card-title">Setup wizard</div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:12px">Start de 7-stap wizard opnieuw om je profiel, vakken en examendatums opnieuw in te stellen.</div>
+    <button class="btn btn-ghost btn-sm" onclick="startWizard()">↻ Wizard opnieuw doen</button>
   </div>
 
   <div class="card mt-16" style="border-color:var(--red)">
@@ -2097,6 +2126,38 @@ tr:hover td { background: var(--bg3); }
   </div>
 </div>
 
+<!-- ══════════ SETUP WIZARD ══════════ -->
+<div id="wizard-overlay" style="display:none;position:fixed;inset:0;z-index:200;background:var(--bg);overflow-y:auto">
+  <div style="max-width:640px;margin:0 auto;padding:40px 24px 60px">
+    <div style="text-align:center;margin-bottom:24px">
+      <div style="font-family:var(--font-display);font-size:32px;font-weight:800;color:var(--text);margin-bottom:4px">Exam<span style="color:var(--accent)">OS</span></div>
+      <div style="font-size:12px;color:var(--text3);letter-spacing:.08em;text-transform:uppercase">Setup Wizard</div>
+    </div>
+    <!-- Progress bar -->
+    <div style="display:flex;gap:4px;margin-bottom:32px">
+      <div class="wiz-step-bar" data-step="1"></div>
+      <div class="wiz-step-bar" data-step="2"></div>
+      <div class="wiz-step-bar" data-step="3"></div>
+      <div class="wiz-step-bar" data-step="4"></div>
+      <div class="wiz-step-bar" data-step="5"></div>
+      <div class="wiz-step-bar" data-step="6"></div>
+      <div class="wiz-step-bar" data-step="7"></div>
+    </div>
+    <div id="wizard-step-content"></div>
+    <div style="display:flex;gap:8px;justify-content:space-between;margin-top:32px;padding-top:20px;border-top:1px solid var(--border)">
+      <button class="btn btn-ghost" id="wiz-back-btn" onclick="wizardBack()">← Vorige</button>
+      <div style="flex:1"></div>
+      <button class="btn btn-ghost" id="wiz-skip-btn" onclick="wizardSkip()" style="display:none">Overslaan</button>
+      <button class="btn btn-primary" id="wiz-next-btn" onclick="wizardNext()">Volgende →</button>
+    </div>
+  </div>
+</div>
+
+<!-- Demo banner (shown when wizard not completed) -->
+<div id="demo-banner" style="display:none;position:fixed;top:0;left:260px;right:0;z-index:50;background:var(--amber);color:#000;padding:8px 16px;text-align:center;font-size:12px;font-weight:600;cursor:pointer" onclick="startWizard()">
+  📋 Demo modus — dit is voorbeelddata. Klik hier om je eigen profiel in te stellen →
+</div>
+
 <!-- Break overlay -->
 <div class="break-overlay" id="break-overlay" style="display:none">
   <div class="break-title">Pauze!</div>
@@ -2335,6 +2396,7 @@ function getDefaultData() {
     starLog: [],
     streak: { current: 0, best: 0, lastDate: '' },
     budgetOverrides: {},
+    wizardCompleted: true,
   };
 }
 
@@ -2437,8 +2499,11 @@ function calcUrgency(subj, onDate) {
 }
 
 // Shared budget calculation — used by planners and settings UI
+// Safe during bootstrap: wrap all state access in try/catch (state is in TDZ at load)
 function calcSubjectBudgets(subjs, totalSlots, onDate) {
   const today = onDate || todayStr();
+  let _state = null;
+  try { _state = state; } catch(e) { _state = null; }
   const weights = {};
   let totalWeight = 0;
   subjs.forEach(s => {
@@ -2446,12 +2511,15 @@ function calcSubjectBudgets(subjs, totalSlots, onDate) {
     const daysLeft = Math.max(1, (examD - new Date(today + 'T12:00:00')) / 86400000);
     if (daysLeft <= 0) { weights[s.id] = 0; return; }
     const se = s.grade ?? 6;
-    const avg = (typeof subjectAvgScore === 'function' ? subjectAvgScore(s.id) : null) ?? se;
-    const bestCE = (typeof bestCEScore === 'function' ? bestCEScore(s.id) : null);
+    let avg = se, bestCE = null;
+    if (_state && _state.studyLog) {
+      try { avg = subjectAvgScore(s.id) ?? se; } catch(e) {}
+      try { bestCE = bestCEScore(s.id); } catch(e) {}
+    }
     const currentLevel = bestCE ?? avg;
     const deficit = Math.max(0, 6.5 - currentLevel);
     const timePressure = Math.sqrt(36 / daysLeft);
-    const override = (state.budgetOverrides || {})[s.id] ?? 1.0;
+    const override = (_state && _state.budgetOverrides) ? (_state.budgetOverrides[s.id] ?? 1.0) : 1.0;
     const w = Math.max(0.3, deficit * 1.5 + 0.5) * timePressure * override;
     weights[s.id] = w;
     totalWeight += w;
@@ -2459,7 +2527,7 @@ function calcSubjectBudgets(subjs, totalSlots, onDate) {
   const result = {};
   subjs.forEach(s => {
     const budget = totalWeight > 0 ? Math.round((weights[s.id] / totalWeight) * totalSlots) : 0;
-    const done = state.planning ? state.planning.filter(p => p.subjectId === s.id && p.done).length : 0;
+    const done = (_state && _state.planning) ? _state.planning.filter(p => p.subjectId === s.id && p.done).length : 0;
     const pct = totalSlots > 0 ? Math.round((budget / totalSlots) * 100) : 0;
     result[s.id] = { weight: weights[s.id], budget, done, remaining: Math.max(0, budget - done), pct };
   });
@@ -6295,6 +6363,303 @@ function checkWeeklyCompletion() {
 }
 
 // ══════════════════════════════════════════
+// SETUP WIZARD
+// ══════════════════════════════════════════
+
+const WIZARD_SUBJECT_PRESETS = [
+  { id: 'math',  name: 'Wiskunde B', defaultDuration: 180 },
+  { id: 'mathA', name: 'Wiskunde A', defaultDuration: 180 },
+  { id: 'phys',  name: 'Natuurkunde', defaultDuration: 180 },
+  { id: 'chem',  name: 'Scheikunde', defaultDuration: 180 },
+  { id: 'bio',   name: 'Biologie', defaultDuration: 180 },
+  { id: 'nl',    name: 'Nederlands', defaultDuration: 180 },
+  { id: 'eng',   name: 'Engels', defaultDuration: 150 },
+  { id: 'ger',   name: 'Duits', defaultDuration: 150 },
+  { id: 'fr',    name: 'Frans', defaultDuration: 150 },
+  { id: 'esp',   name: 'Spaans', defaultDuration: 150 },
+  { id: 'lat',   name: 'Latijn', defaultDuration: 180 },
+  { id: 'grk',   name: 'Grieks', defaultDuration: 180 },
+  { id: 'hist',  name: 'Geschiedenis', defaultDuration: 180 },
+  { id: 'geo',   name: 'Aardrijkskunde', defaultDuration: 180 },
+  { id: 'econ',  name: 'Economie', defaultDuration: 180 },
+  { id: 'mo',    name: 'M&O / Bedrijfseconomie', defaultDuration: 180 },
+  { id: 'maat',  name: 'Maatschappijleer', defaultDuration: 180 },
+  { id: 'phil',  name: 'Filosofie', defaultDuration: 180 },
+  { id: 'art',   name: 'Kunst Algemeen', defaultDuration: 180 },
+];
+
+let _wizardState = {
+  step: 1,
+  name: '',
+  selectedSubjects: [],
+  grades: {},
+  examDates: {},
+  examTimes: {},
+  examDurations: {},
+  topics: {},
+};
+
+function startWizard() {
+  _wizardState = {
+    step: 1,
+    name: state.settings?.name || '',
+    selectedSubjects: state.subjects.map(s => s.id),
+    grades: Object.fromEntries(state.subjects.map(s => [s.id, s.grade])),
+    examDates: Object.fromEntries(state.subjects.map(s => [s.id, s.examDate])),
+    examTimes: Object.fromEntries(state.subjects.map(s => [s.id, s.examTime])),
+    examDurations: Object.fromEntries(state.subjects.map(s => [s.id, s.examDuration])),
+    topics: JSON.parse(JSON.stringify(state.topics || {})),
+  };
+  document.getElementById('wizard-overlay').style.display = 'block';
+  renderWizardStep();
+}
+
+function closeWizard() {
+  document.getElementById('wizard-overlay').style.display = 'none';
+}
+
+function wizardSkip() {
+  if (confirm('Wizard overslaan? Je kunt later opnieuw beginnen via Instellingen.')) {
+    closeWizard();
+  }
+}
+
+function wizardBack() {
+  if (_wizardState.step > 1) {
+    _wizardState.step--;
+    renderWizardStep();
+  }
+}
+
+function wizardNext() {
+  if (!validateWizardStep()) return;
+  if (_wizardState.step < 7) {
+    _wizardState.step++;
+    renderWizardStep();
+  } else {
+    finishWizard();
+  }
+}
+
+function validateWizardStep() {
+  const s = _wizardState;
+  switch (s.step) {
+    case 2:
+      const nameEl = document.getElementById('wiz-name');
+      if (nameEl) s.name = nameEl.value.trim();
+      if (!s.name) { showToast('Vul je naam in'); return false; }
+      return true;
+    case 3:
+      if (s.selectedSubjects.length === 0) { showToast('Selecteer minimaal 1 vak'); return false; }
+      return true;
+    case 4:
+      for (const sid of s.selectedSubjects) {
+        const v = parseFloat(document.getElementById('wiz-grade-' + sid)?.value);
+        if (isNaN(v) || v < 1 || v > 10) { showToast('Vul geldig SE cijfer in voor alle vakken'); return false; }
+        s.grades[sid] = v;
+      }
+      return true;
+    case 5:
+      for (const sid of s.selectedSubjects) {
+        const d = document.getElementById('wiz-date-' + sid)?.value;
+        const t = document.getElementById('wiz-time-' + sid)?.value;
+        const dur = parseInt(document.getElementById('wiz-dur-' + sid)?.value);
+        if (!d) { showToast('Vul examendatum in voor alle vakken'); return false; }
+        s.examDates[sid] = d;
+        s.examTimes[sid] = t || '09:00-12:00';
+        s.examDurations[sid] = dur || 180;
+      }
+      return true;
+    case 6:
+      for (const sid of s.selectedSubjects) {
+        const v = document.getElementById('wiz-topics-' + sid)?.value || '';
+        s.topics[sid] = v.split(',').map(t => t.trim()).filter(Boolean);
+        if (s.topics[sid].length === 0) s.topics[sid] = ['Algemeen'];
+      }
+      return true;
+  }
+  return true;
+}
+
+function renderWizardStep() {
+  const s = _wizardState;
+  // Update progress bars
+  document.querySelectorAll('.wiz-step-bar').forEach(el => {
+    const st = parseInt(el.dataset.step);
+    el.classList.toggle('active', st === s.step);
+    el.classList.toggle('completed', st < s.step);
+  });
+  document.getElementById('wiz-back-btn').style.visibility = s.step > 1 ? 'visible' : 'hidden';
+  document.getElementById('wiz-skip-btn').style.display = s.step === 1 ? 'inline-flex' : 'none';
+  document.getElementById('wiz-next-btn').textContent = s.step === 7 ? '✓ Plan genereren' : 'Volgende →';
+
+  const container = document.getElementById('wizard-step-content');
+  let html = '';
+
+  if (s.step === 1) {
+    html = `
+      <div class="wiz-card">
+        <div class="wiz-title">Welkom bij ExamOS 👋</div>
+        <div class="wiz-sub">Dit is een persoonlijk trainingssysteem voor je eindexamen. In de volgende 5 minuten stel je samen met mij je profiel in:</div>
+        <ul style="font-size:13px;color:var(--text2);line-height:1.8;padding-left:20px">
+          <li>Je naam</li>
+          <li>Welke vakken je doet</li>
+          <li>Je schoolexamen (SE) cijfers per vak</li>
+          <li>Examendatums en tijden</li>
+          <li>Onderwerpen per vak</li>
+        </ul>
+        <div class="wiz-sub" style="margin-top:16px">Daarna genereer ik automatisch een gewogen studieplan dat zwakke vakken meer aandacht geeft dan sterke vakken.</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:12px;padding:10px;background:var(--bg4);border-radius:var(--r)">💡 Je kunt later alles aanpassen via Instellingen.</div>
+      </div>`;
+  } else if (s.step === 2) {
+    html = `
+      <div class="wiz-card">
+        <div class="wiz-title">Hoe heet je?</div>
+        <div class="wiz-sub">Je naam verschijnt in notificaties en het dashboard.</div>
+        <input type="text" id="wiz-name" class="form-input" placeholder="Bijv. Jussi" value="${s.name}" style="font-size:16px;padding:12px" autofocus>
+      </div>`;
+  } else if (s.step === 3) {
+    html = `
+      <div class="wiz-card">
+        <div class="wiz-title">Welke vakken doe je?</div>
+        <div class="wiz-sub">Selecteer alle vakken waarvoor je eindexamen doet. Je kunt later nog aanpassen.</div>
+        ${WIZARD_SUBJECT_PRESETS.map(p => `
+          <label class="wiz-subject-checkbox ${s.selectedSubjects.includes(p.id) ? 'checked' : ''}" onclick="toggleWizSubject('${p.id}')">
+            <input type="checkbox" ${s.selectedSubjects.includes(p.id) ? 'checked' : ''} onclick="event.stopPropagation()">
+            <span>${p.name}</span>
+          </label>
+        `).join('')}
+      </div>`;
+  } else if (s.step === 4) {
+    html = `
+      <div class="wiz-card">
+        <div class="wiz-title">Je SE cijfers</div>
+        <div class="wiz-sub">Vul je huidige schoolexamen (SE) gemiddelde in per vak. Dit bepaalt hoe veel aandacht elk vak krijgt in de planning.</div>
+        ${s.selectedSubjects.map(sid => {
+          const preset = WIZARD_SUBJECT_PRESETS.find(p => p.id === sid) || { name: sid };
+          return `
+          <div style="display:grid;grid-template-columns:1fr 100px;gap:12px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">
+            <div style="font-size:13px;color:var(--text)">${preset.name}</div>
+            <input type="number" id="wiz-grade-${sid}" class="form-input" min="1" max="10" step="0.1" value="${s.grades[sid] || ''}" placeholder="6.5">
+          </div>`;
+        }).join('')}
+      </div>`;
+  } else if (s.step === 5) {
+    html = `
+      <div class="wiz-card">
+        <div class="wiz-title">Examendatums</div>
+        <div class="wiz-sub">Vul per vak de datum, tijd en duur in. Check je officiële examenrooster voor de exacte tijden.</div>
+        <div class="wiz-subject-row" style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--border2)">
+          <div>Vak</div><div>Datum</div><div>Tijd</div><div>Duur (min)</div>
+        </div>
+        ${s.selectedSubjects.map(sid => {
+          const preset = WIZARD_SUBJECT_PRESETS.find(p => p.id === sid) || { name: sid, defaultDuration: 180 };
+          return `
+          <div class="wiz-subject-row">
+            <div style="color:var(--text)">${preset.name}</div>
+            <input type="date" id="wiz-date-${sid}" value="${s.examDates[sid] || ''}">
+            <input type="text" id="wiz-time-${sid}" value="${s.examTimes[sid] || '09:00-12:00'}" placeholder="09:00-12:00">
+            <input type="number" id="wiz-dur-${sid}" value="${s.examDurations[sid] || preset.defaultDuration}" min="60" max="240">
+          </div>`;
+        }).join('')}
+      </div>`;
+  } else if (s.step === 6) {
+    html = `
+      <div class="wiz-card">
+        <div class="wiz-title">Onderwerpen per vak</div>
+        <div class="wiz-sub">Lijst met hoofdonderwerpen per vak, gescheiden door komma's. Je kunt later nog bewerken.</div>
+        ${s.selectedSubjects.map(sid => {
+          const preset = WIZARD_SUBJECT_PRESETS.find(p => p.id === sid) || { name: sid };
+          const defaults = (DEFAULT_TOPICS || {})[sid] || [];
+          const current = s.topics[sid] || defaults;
+          return `
+          <div style="margin-bottom:14px">
+            <label style="display:block;font-size:12px;color:var(--text);margin-bottom:4px;font-weight:500">${preset.name}</label>
+            <textarea id="wiz-topics-${sid}" class="form-textarea" rows="2" style="font-size:11px">${(current.length ? current : ['Algemeen']).join(', ')}</textarea>
+          </div>`;
+        }).join('')}
+      </div>`;
+  } else if (s.step === 7) {
+    const firstExam = Object.values(s.examDates).sort()[0] || '—';
+    html = `
+      <div class="wiz-card">
+        <div class="wiz-title">Klaar! 🎯</div>
+        <div class="wiz-sub">Ik ga nu een gewogen studieplan genereren met de volgende instellingen:</div>
+        <div style="font-size:12px;color:var(--text2);line-height:1.8">
+          <div><strong style="color:var(--text)">Student:</strong> ${s.name}</div>
+          <div><strong style="color:var(--text)">Vakken:</strong> ${s.selectedSubjects.length}</div>
+          <div><strong style="color:var(--text)">Eerste examen:</strong> ${firstExam}</div>
+          <div><strong style="color:var(--text)">Gemiddeld SE:</strong> ${(Object.values(s.grades).reduce((a,b)=>a+b,0) / s.selectedSubjects.length).toFixed(1)}</div>
+        </div>
+        <div style="margin-top:16px;padding:12px;background:var(--accent-glow);border-radius:var(--r);font-size:11px;color:var(--text2)">
+          💡 Vakken met lage SE cijfers krijgen meer sessies. Na elk examen vallen slots vrij voor de resterende vakken.
+        </div>
+      </div>`;
+  }
+
+  container.innerHTML = html;
+}
+
+function toggleWizSubject(sid) {
+  const s = _wizardState;
+  const idx = s.selectedSubjects.indexOf(sid);
+  if (idx >= 0) s.selectedSubjects.splice(idx, 1);
+  else s.selectedSubjects.push(sid);
+  renderWizardStep();
+}
+
+function finishWizard() {
+  const s = _wizardState;
+  // Build new subjects array
+  const newSubjects = s.selectedSubjects.map(sid => {
+    const preset = WIZARD_SUBJECT_PRESETS.find(p => p.id === sid) || {};
+    return {
+      id: sid,
+      name: preset.name || sid,
+      priority: (s.grades[sid] < 5.5) ? 'high' : 'med',
+      color: sid,
+      grade: s.grades[sid],
+      examDate: s.examDates[sid],
+      examTime: s.examTimes[sid],
+      examDuration: s.examDurations[sid],
+    };
+  });
+
+  state.settings.name = s.name;
+  state.subjects = newSubjects;
+  state.topics = s.topics;
+  state.wizardCompleted = true;
+
+  // Clear demo data if present
+  state.studyLog = state.studyLog.filter(l => !l._demo);
+  state.mistakeLog = state.mistakeLog.filter(m => !m._demo);
+  state.examResults = state.examResults.filter(r => !r._demo);
+  state.starLog = (state.starLog || []).filter(l => !l._demo);
+  state.stars = 0;
+  state.streak = { current: 0, best: 0, lastDate: '' };
+  state.budgetOverrides = {};
+
+  // Regenerate plan
+  state.planning = state.planning.filter(p => p.done); // keep history
+  regeneratePlan();
+
+  saveData();
+  closeWizard();
+  document.getElementById('demo-banner').style.display = 'none';
+  showToast('Profiel opgeslagen — ' + newSubjects.length + ' vakken ingepland');
+  showPage('today');
+  renderToday();
+}
+
+function checkWizardOnLoad() {
+  if (state.wizardCompleted === false) {
+    // First-run or reset — show wizard
+    document.getElementById('demo-banner').style.display = 'block';
+    startWizard();
+  }
+}
+
+// ══════════════════════════════════════════
 // INIT
 // ══════════════════════════════════════════
 
@@ -6308,6 +6673,7 @@ function init() {
   populateMistakeFilterSubjects();
   initGraderSubjects();
   renderToday();
+  checkWizardOnLoad();
 
   // Request notification permission
   requestNotifications();
